@@ -1,10 +1,9 @@
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::request::AtomicRequest;
-use crate::utils::{now_ms, parse_i64};
+use crate::utils::{now_ms};
 use moka::Expiry;
 use moka::future::Cache;
 use serde::{Deserialize, Serialize, Serializer};
-use std::mem::size_of;
 use std::option::Option;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,13 +16,6 @@ pub struct MyValue {
     pub expires_at: u64, //绝对时间  这里 假设不同节点的时钟偏移是有界的
 }
 
-// =====================
-// 内存估算相关常量
-// =====================
-
-const MY_VALUE_SIZE: usize = size_of::<MyValue>();
-const ARC_COUNTER_SIZE: usize = 2 * size_of::<usize>(); // strong + weak
-const VEC_SIZE: usize = size_of::<Vec<u8>>();
 
 impl MyValue {
     pub fn estimated_memory_usage(&self) -> usize {
@@ -84,11 +76,6 @@ pub struct MyCache {
     pub cache: Cache<Arc<Vec<u8>>, MyValue>,
     pub batch_lock: Arc<Mutex<()>>,
 }
-pub enum UpdateType<'a> {
-    None,
-    Snapshot(&'a mut Vec<AtomicRequest>),
-    CAS(u32),
-}
 
 impl MyCache {
     /// 创建 MyCache 时自动初始化内部 Cache
@@ -112,4 +99,9 @@ impl MyCache {
         self.cache.entry_count()
     }
     //成功就返回链表长度 失败返回错误内容 不存在就创建一个list
+}
+pub enum UpdateType<'a> {
+    None,
+    Snapshot(&'a mut Vec<AtomicRequest>),
+    CAS(u32),
 }
