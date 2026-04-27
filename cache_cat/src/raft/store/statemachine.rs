@@ -63,7 +63,6 @@ pub struct StateMachineData {
 
     // 只有俩个任务会获取这个锁，快照和raft主任务。它们都是单线程的。 启动的时候也可能被获取但这不影响性能。
     raft_meta_data: Arc<Mutex<RaftMetaData>>,
-
 }
 
 impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
@@ -157,13 +156,14 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         Strm: Stream<Item = Result<EntryResponder<TypeConfig>, io::Error>> + Unpin + OptionalSend,
     {
         let mut raft_meta = self.data.raft_meta_data.lock().await;
+        let _lock = self.data.kvs.batch_lock.lock().await;
         if raft_meta.snapshot_state {
             let mut operation_queue = self.data.incremental_operation_queue.lock().await;
             while let Some((entry, responder)) = entries.try_next().await? {
                 raft_meta.last_applied_log_id = Some(entry.log_id);
                 let st = &self.data.kvs;
                 let response = match entry.payload {
-                    EntryPayload::Blank => Value::none(),
+                    EntryPayload::Blank => Value::ok(),
                     EntryPayload::Normal(req) => match req {
                         Request::Base(base) => {
                             match base {
@@ -204,7 +204,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     EntryPayload::Membership(mem) => {
                         raft_meta.last_membership =
                             StoredMembership::new(Some(entry.log_id.clone()), mem.clone());
-                        Value::none()
+                        Value::ok()
                     }
                 };
                 if let Some(responder) = responder {
@@ -216,7 +216,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 raft_meta.last_applied_log_id = Some(entry.log_id);
                 let st = &self.data.kvs;
                 let response = match entry.payload {
-                    EntryPayload::Blank => Value::none(),
+                    EntryPayload::Blank => Value::ok(),
                     EntryPayload::Normal(req) => match req {
                         Request::Base(base) => {
                             match base {
@@ -247,7 +247,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     EntryPayload::Membership(mem) => {
                         raft_meta.last_membership =
                             StoredMembership::new(Some(entry.log_id.clone()), mem.clone());
-                        Value::none()
+                        Value::ok()
                     }
                 };
                 if let Some(responder) = responder {
@@ -335,7 +335,6 @@ pub async fn redis_mset_hand(
     params: MsetParams,
     mut update_type: UpdateType<'_>,
 ) -> Value {
-    let _lock = cache.batch_write_lock.write().await;
     for pair in params.pairs {
         let set = SetReq {
             key: Arc::from(pair.0),

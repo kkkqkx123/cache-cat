@@ -8,7 +8,7 @@ use std::mem::size_of;
 use std::option::Option;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MyValue {
@@ -82,7 +82,7 @@ impl Expiry<Arc<Vec<u8>>, MyValue> for MyExpiry {
 pub struct MyCache {
     // 内部 Cache的Clone成本是低廉的
     pub cache: Cache<Arc<Vec<u8>>, MyValue>,
-    pub batch_write_lock: Arc<RwLock<()>>,
+    pub batch_lock: Arc<Mutex<()>>,
 }
 pub enum UpdateType<'a> {
     None,
@@ -99,7 +99,7 @@ impl MyCache {
             .build();
         Self {
             cache,
-            batch_write_lock: Arc::new(RwLock::new(())),
+            batch_lock: Arc::new(Mutex::new(())),
         }
     }
 

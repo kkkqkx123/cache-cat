@@ -2,15 +2,16 @@ use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::key::del::DelCommand;
 use crate::protocol::string::get::GetCommand;
+use crate::protocol::string::incr::IncrCommand;
+use crate::protocol::string::incrby::IncrByCommand;
+use crate::protocol::string::mget::MgetCommand;
+use crate::protocol::string::mset::MsetCommand;
 use crate::protocol::string::set::SetCommand;
 use crate::raft::network::rpc::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
-use crate::protocol::string::incr::IncrCommand;
-use crate::protocol::string::incrby::IncrByCommand;
-use crate::protocol::string::mset::MsetCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -48,7 +49,7 @@ impl CommandFactory {
         factory.register("INCR", IncrCommand);
         factory.register("INCRBY", IncrByCommand);
         factory.register("MSET", MsetCommand);
-
+        factory.register("MGET", MgetCommand);
 
         factory
     }
