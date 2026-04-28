@@ -4,7 +4,7 @@ use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, LPushReq};
 use crate::raft::types::entry::request::AtomicRequest;
 use moka::ops::compute::{CompResult, Op};
-use std::collections::LinkedList;
+use std::collections::VecDeque;
 
 impl MyCache {
     pub async fn l_push(&self, l_push: LPushReq, update: &mut UpdateType<'_>) -> Value {
@@ -18,8 +18,9 @@ impl MyCache {
                                 let mut value = entry.into_value();
                                 match &mut value.data {
                                     ValueObject::List(data) => {
-                                        value.version;
-                                        data.push_front(l_push.value);
+                                        for element in l_push.elements {
+                                            data.push_front(element);
+                                        }
                                         Op::Put(value)
                                     }
                                     _ => Op::Nop,
@@ -27,7 +28,7 @@ impl MyCache {
                             }
                             None => {
                                 let value = MyValue {
-                                    data: ValueObject::List(LinkedList::from([l_push.value])),
+                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
                                     expires_at: 0,
                                     version: 0,
                                 };
@@ -52,7 +53,9 @@ impl MyCache {
                                             request: BaseOperation::LPush(l_push.clone()),
                                         });
                                         value.version += 1;
-                                        data.push_front(l_push.value);
+                                        for element in l_push.elements {
+                                            data.push_front(element);
+                                        }
                                         Op::Put(value)
                                     }
                                     _ => Op::Nop,
@@ -64,7 +67,7 @@ impl MyCache {
                                     request: BaseOperation::LPush(l_push.clone()),
                                 });
                                 let value = MyValue {
-                                    data: ValueObject::List(LinkedList::from([l_push.value])),
+                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
                                     expires_at: 0,
                                     version: 1,
                                 };
@@ -87,7 +90,9 @@ impl MyCache {
                                             return Op::Nop;
                                         }
                                         value.version += 1;
-                                        data.push_front(l_push.value);
+                                        for element in l_push.elements {
+                                            data.push_front(element);
+                                        }
                                         Op::Put(value)
                                     }
                                     _ => Op::Nop,
@@ -99,7 +104,7 @@ impl MyCache {
                                     tracing::error!("CAS failed: operation not found");
                                 }
                                 let value = MyValue {
-                                    data: ValueObject::List(LinkedList::from([l_push.value])),
+                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
                                     expires_at: 0,
                                     version: 1,
                                 };
@@ -110,7 +115,6 @@ impl MyCache {
                     .await
             }
         };
-
         match result {
             CompResult::Inserted(entry)
             | CompResult::ReplacedWith(entry)

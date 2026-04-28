@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet, LinkedList};
+use std::collections::{BTreeMap, HashMap, HashSet, LinkedList, VecDeque};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ pub enum ValueObject {
     Int(i64),
 
     String(Arc<Vec<u8>>),
-    List(LinkedList<Arc<Vec<u8>>>),
+    List(VecDeque<Arc<Vec<u8>>>),
 
     ZSet(BTreeMap<Vec<u8>, Vec<u8>>),
     Set(HashSet<Vec<u8>>),

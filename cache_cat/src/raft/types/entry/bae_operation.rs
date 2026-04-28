@@ -44,15 +44,15 @@ impl fmt::Display for SetReq {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct LPushReq {
     pub key: Arc<Vec<u8>>,
-    pub value: Arc<Vec<u8>>,
+    pub elements: Vec<Arc<Vec<u8>>>,
 }
 impl fmt::Display for LPushReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "LPushReq {{ key: {}, value: {} }}",
+            "LPushReq {{ key: {}, elements: {:?} }}",
             String::from_utf8_lossy(&self.key),
-            String::from_utf8_lossy(&self.value)
+            self.elements
         )
     }
 }

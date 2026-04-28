@@ -1,6 +1,8 @@
 use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::key::del::DelCommand;
+use crate::protocol::key::lrange::LRangeCommand;
+use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::string::get::GetCommand;
 use crate::protocol::string::incr::IncrCommand;
 use crate::protocol::string::incrby::IncrByCommand;
@@ -50,6 +52,8 @@ impl CommandFactory {
         factory.register("INCRBY", IncrByCommand);
         factory.register("MSET", MsetCommand);
         factory.register("MGET", MgetCommand);
+        factory.register("LPUSH", LPushCommand);
+        factory.register("LRANGE", LRangeCommand);
 
         factory
     }

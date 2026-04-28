@@ -19,4 +19,8 @@ r = redis.Redis(
 r.mset({'test3': '1', 'test2': '2'})
 # print(r.get('123123'))
 print(r.mget('test3', 'test111111'))
+
+r.lpush('testList', '1', '2', '3')
+# r.delete('testList')
+print(r.lrange('testList', 0, -1))
 # print(r.get('name'))
