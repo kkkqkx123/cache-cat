@@ -11,6 +11,6 @@ r = redis.Redis(
 )
 
 # 设置 key，1 秒后过期
-r.set('name', "test")
-r.expire('name', 1)
-print(r.get('name'))
+r.set('3333333', "test")
+r.delete('3333333')
+print(r.get('3333333'))

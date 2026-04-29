@@ -73,7 +73,8 @@ impl Expiry<Arc<Vec<u8>>, MyValue> for MyExpiry {
 pub struct MyCache {
     // 内部 Cache的Clone成本是低廉的
     pub cache: Cache<Arc<Vec<u8>>, MyValue>,
-    pub batch_lock: Arc<Mutex<()>>,
+    pub shard_lock: Arc<Mutex<()>>, //同时获取俩把锁时 先加shard_lock
+    pub exclusive_lock: Arc<Mutex<()>>,
 }
 
 impl MyCache {
@@ -85,7 +86,8 @@ impl MyCache {
             .build();
         Self {
             cache,
-            batch_lock: Arc::new(Mutex::new(())),
+            shard_lock: Arc::new(Mutex::new(())),
+            exclusive_lock: Arc::new(Mutex::new(())),
         }
     }
 

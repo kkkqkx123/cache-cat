@@ -4,6 +4,7 @@ use crate::raft::types::entry::bae_operation::BaseOperation;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use crate::protocol::key::del::DelParams;
 
 /// A request to the KV store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,6 +12,7 @@ pub enum Request {
     Base(BaseOperation),
     RedisSet(SetParams),
     RedisMset(MsetParams),
+    RedisDel(DelParams),
 }
 
 impl fmt::Display for Request {
@@ -25,6 +27,7 @@ impl fmt::Display for Request {
             },
             Request::RedisSet(req) => write!(f, "RedisSet: {}", req),
             Request::RedisMset(req) => write!(f, "RedisMset: {}", req),
+            Request::RedisDel(req) => write!(f, "RedisDel: {}", req),
         }
     }
 }

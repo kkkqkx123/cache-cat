@@ -2,7 +2,7 @@ use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::expire::ExpireCommand;
-use crate::protocol::key::lrange::LRangeCommand;
+use crate::protocol::list::lrange::LRangeCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::string::get::GetCommand;
 use crate::protocol::string::incr::IncrCommand;

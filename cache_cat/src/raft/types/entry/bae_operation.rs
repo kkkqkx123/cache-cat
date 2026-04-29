@@ -6,8 +6,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BaseOperation {
     Set(SetReq),
-    LPush(LPushReq),
     Del(DelReq),
+    LPush(LPushReq),
     Incr(IncrReq),
     Expire(ExpireReq),
 }
@@ -79,10 +79,10 @@ impl fmt::Display for LPushReq {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DelReq {
-    pub keys: Arc<Vec<Vec<u8>>>,
+    pub key: Arc<Vec<u8>>,
 }
 impl fmt::Display for DelReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DelReq {{ keys: {:?} }}", self.keys)
+        write!(f, "DelReq {{ key: {} }}", String::from_utf8_lossy(&self.key))
     }
 }

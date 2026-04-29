@@ -55,11 +55,7 @@ pub struct MgetCommand;
 
 #[async_trait]
 impl Command for MgetCommand {
-    async fn execute(
-        &self,
-        items: &[Value],
-        server: &RedisServer,
-    ) -> Result<Value, CacheCatError> {
+    async fn execute(&self, items: &[Value], server: &RedisServer) -> Result<Value, CacheCatError> {
         let params = MgetParams::parse(items)?;
         let raft = &server.app.raft;
         let linearizer = raft
@@ -70,11 +66,12 @@ impl Command for MgetCommand {
             .await_ready(&raft)
             .await
             .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
-        let _lock = server.app.state_machine.data.kvs.batch_lock.lock();
         let mut results = Vec::with_capacity(params.keys.len());
-
+        let _shard_lock = server.app.state_machine.data.kvs.shard_lock.lock();
+        let _exclusive_lock = server.app.state_machine.data.kvs.exclusive_lock.lock();
         for key in &params.keys {
-            match get_value(server, key).await {
+            let value = get_value(server, key).await;
+            match value {
                 Ok(Some(value)) => {
                     results.push(Value::BulkString(Some(value)));
                 }

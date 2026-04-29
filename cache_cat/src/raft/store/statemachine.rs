@@ -1,4 +1,5 @@
 use crate::protocol::NO_EXPIRATION;
+use crate::protocol::key::del::DelParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::store::snapshot::snapshot_handler::{
@@ -7,7 +8,7 @@ use crate::raft::store::snapshot::snapshot_handler::{
 use crate::raft::types::core::cache::moka::{MyCache, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::{BaseOperation, SetReq};
+use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, SetReq};
 use crate::raft::types::entry::request::{AtomicRequest, Request};
 use crate::raft::types::file_operator::FileOperator;
 use crate::raft::types::raft_types::{NodeId, TypeConfig};
@@ -145,7 +146,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         Strm: Stream<Item = Result<EntryResponder<TypeConfig>, io::Error>> + Unpin + OptionalSend,
     {
         let mut raft_meta = self.data.raft_meta_data.lock().await;
-        let _lock = self.data.kvs.batch_lock.lock().await;
+        let _lock = self.data.kvs.shard_lock.lock().await;
         let mut guard;
         let update_type = if raft_meta.snapshot_state {
             guard = self.data.incremental_operation_queue.lock().await;
@@ -168,10 +169,17 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                             }
                             BaseOperation::Expire(expire) => st.expire(expire, update_type).await,
                             BaseOperation::LPush(l_push) => st.l_push(l_push, update_type).await,
-                            BaseOperation::Del(del) => st.del(del, update_type).await,
+                            BaseOperation::Del(del) => {
+                                if st.del(del, update_type).await {
+                                    Value::Integer(1)
+                                } else {
+                                    Value::Integer(0)
+                                }
+                            }
                             BaseOperation::Incr(incr) => st.incr(incr, update_type).await,
                         }
                     }
+                    Request::RedisDel(del) => redis_del_hand(st, del, update_type).await,
                     Request::RedisSet(set) => redis_set_hand(st, set, update_type).await,
                     Request::RedisMset(mset) => redis_mset_hand(st, mset, update_type).await,
                 },
@@ -250,12 +258,30 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         }
     }
 }
+pub async fn redis_del_hand(
+    cache: &MyCache,
+    params: DelParams,
+    update_type: &mut UpdateType<'_>,
+) -> Value {
+    let mut count = 0;
+    let _exclusive_lock = cache.exclusive_lock.lock().await;
+    for key in params.keys {
+        let del = DelReq {
+            key: Arc::from(key),
+        };
+        if cache.del(del, update_type).await {
+            count = count + 1;
+        }
+    }
+    Value::Integer(count)
+}
 
 pub async fn redis_mset_hand(
     cache: &MyCache,
     params: MsetParams,
     update_type: &mut UpdateType<'_>,
 ) -> Value {
+    let _exclusive_lock = cache.exclusive_lock.lock().await;
     for pair in params.pairs {
         let set = SetReq {
             key: Arc::from(pair.0),
