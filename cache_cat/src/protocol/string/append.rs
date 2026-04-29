@@ -3,7 +3,7 @@ use crate::protocol::command::Command;
 use crate::raft::network::rpc::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::AppendReq;
-use crate::raft::types::entry::bae_operation::BaseOperation::{Append, Incr};
+use crate::raft::types::entry::bae_operation::BaseOperation::Append;
 use crate::raft::types::entry::request::Request;
 use async_trait::async_trait;
 use std::sync::Arc;
