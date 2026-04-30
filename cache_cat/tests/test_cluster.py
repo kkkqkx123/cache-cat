@@ -11,6 +11,4 @@ r = redis.Redis(
 )
 
 # 设置 key，1 秒后过期
-r.set('name', "hello")
-r.append('name'," world!")
-print(r.get('name'))
+print(r.hset('321', 'zhangsan', '1'))

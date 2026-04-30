@@ -5,6 +5,7 @@ use crate::raft::types::entry::bae_operation::{BaseOperation, LPushReq};
 use crate::raft::types::entry::request::AtomicRequest;
 use moka::ops::compute::{CompResult, Op};
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 impl MyCache {
     pub async fn l_push(&self, l_push: LPushReq, update: &mut UpdateType<'_>) -> Value {
@@ -17,7 +18,8 @@ impl MyCache {
                             Some(entry) => {
                                 let mut value = entry.into_value();
                                 match &mut value.data {
-                                    ValueObject::List(data) => {
+                                    ValueObject::List(data_arc) => {
+                                        let data = Arc::make_mut(data_arc);
                                         for element in l_push.elements {
                                             data.push_front(element);
                                         }
@@ -26,14 +28,11 @@ impl MyCache {
                                     _ => Op::Nop,
                                 }
                             }
-                            None => {
-                                let value = MyValue {
-                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
-                                    expires_at: 0,
-                                    version: 1,
-                                };
-                                Op::Put(value)
-                            }
+                            None => Op::Put(MyValue {
+                                data: ValueObject::List(Arc::from(VecDeque::from(l_push.elements))),
+                                expires_at: 0,
+                                version: 1,
+                            }),
                         }
                     })
                     .await
@@ -46,7 +45,8 @@ impl MyCache {
                             Some(entry) => {
                                 let mut value = entry.into_value();
                                 match &mut value.data {
-                                    ValueObject::List(data) => {
+                                    ValueObject::List(data_arc) => {
+                                        let data = Arc::make_mut(data_arc);
                                         queue.push(AtomicRequest {
                                             version: value.version,
                                             request: BaseOperation::LPush(l_push.clone()),
@@ -66,7 +66,9 @@ impl MyCache {
                                     request: BaseOperation::LPush(l_push.clone()),
                                 });
                                 let value = MyValue {
-                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
+                                    data: ValueObject::List(Arc::from(VecDeque::from(
+                                        l_push.elements,
+                                    ))),
                                     expires_at: 0,
                                     version: 1,
                                 };
@@ -84,7 +86,8 @@ impl MyCache {
                             Some(entry) => {
                                 let mut value = entry.into_value();
                                 match &mut value.data {
-                                    ValueObject::List(data) => {
+                                    ValueObject::List(data_arc) => {
+                                        let data = Arc::make_mut(data_arc);
                                         if value.version != *cas_version - 1 {
                                             return Op::Nop;
                                         }
@@ -99,7 +102,9 @@ impl MyCache {
                             }
                             None => {
                                 let value = MyValue {
-                                    data: ValueObject::List(VecDeque::from(l_push.elements)),
+                                    data: ValueObject::List(Arc::from(VecDeque::from(
+                                        l_push.elements,
+                                    ))),
                                     expires_at: 0,
                                     version: 1,
                                 };

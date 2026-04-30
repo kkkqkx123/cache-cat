@@ -11,6 +11,22 @@ pub enum BaseOperation {
     Incr(IncrReq),
     Expire(ExpireReq),
     Append(AppendReq),
+    HSet(HSetReq),
+}
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct HSetReq {
+    pub key: Arc<Vec<u8>>,
+    pub elements: Vec<(Arc<Vec<u8>>, Arc<Vec<u8>>)>,
+}
+impl fmt::Display for HSetReq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "HSetReq {{ key: {}, field: {:?} }}",
+            String::from_utf8_lossy(&self.key),
+            self.elements
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

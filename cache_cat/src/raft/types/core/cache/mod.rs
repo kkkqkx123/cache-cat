@@ -3,3 +3,4 @@ pub mod moka;
 mod string;
 mod key;
 mod list;
+mod hash;

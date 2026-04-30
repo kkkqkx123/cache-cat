@@ -1,5 +1,6 @@
 use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
+use crate::protocol::hash::hset::HSetCommand;
 use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::expire::ExpireCommand;
 use crate::protocol::list::lpush::LPushCommand;
@@ -59,6 +60,8 @@ impl CommandFactory {
         factory.register("LRANGE", LRangeCommand);
         factory.register("EXPIRE", ExpireCommand);
         factory.register("APPEND", AppendCommand);
+        factory.register("HSET", HSetCommand);
+
         factory
     }
 
