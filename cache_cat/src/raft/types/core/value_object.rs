@@ -1,9 +1,9 @@
+use crate::raft::types::entry::bae_operation::ZAddReq;
 use ordered_float::OrderedFloat;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use crate::raft::types::entry::bae_operation::ZAddReq;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SortedSet {
@@ -68,12 +68,18 @@ impl SortedSet {
                 }
 
                 // 添加到新分数
-                self.tree.entry(score).or_insert_with(Vec::new).push(Arc::clone(&member));
+                self.tree
+                    .entry(score)
+                    .or_insert_with(Vec::new)
+                    .push(Arc::clone(&member));
 
                 changed_count += 1;
             } else {
                 // 新元素
-                self.tree.entry(score).or_insert_with(Vec::new).push(Arc::clone(&member));
+                self.tree
+                    .entry(score)
+                    .or_insert_with(Vec::new)
+                    .push(Arc::clone(&member));
 
                 added_count += 1;
                 changed_count += 1;
@@ -81,10 +87,59 @@ impl SortedSet {
         }
 
         // 根据 ch 标志决定返回值
-        if ch {
-            changed_count
+        if ch { changed_count } else { added_count }
+    }
+    pub fn zrange(&self, start: i64, stop: i64, with_scores: bool) -> Vec<Vec<u8>> {
+        // (score, member)
+        let mut all: Vec<(f64, &Arc<Vec<u8>>)> = Vec::new();
+
+        for (score, members) in &self.tree {
+            for member in members {
+                all.push((score.0, member));
+            }
+        }
+
+        let len = all.len() as i64;
+        if len == 0 {
+            return Vec::new();
+        }
+
+        // Redis 风格索引归一化
+        let normalize = |idx: i64| -> i64 {
+            if idx < 0 {
+                (len + idx).max(0)
+            } else {
+                idx.min(len - 1)
+            }
+        };
+
+        let start = normalize(start);
+        let stop = normalize(stop);
+
+        if start > stop || start >= len {
+            return Vec::new();
+        }
+
+        let slice = &all[start as usize..=stop as usize];
+
+        // 根据 with_scores 决定输出格式
+        if with_scores {
+            let mut result = Vec::with_capacity(slice.len() * 2);
+
+            for (score, member) in slice {
+                // member
+                result.push(member.as_ref().clone());
+
+                // score → 字符串（对齐 Redis）
+                result.push(score.to_string().into_bytes());
+            }
+
+            result
         } else {
-            added_count
+            slice
+                .iter()
+                .map(|(_, member)| member.as_ref().clone())
+                .collect()
         }
     }
 }

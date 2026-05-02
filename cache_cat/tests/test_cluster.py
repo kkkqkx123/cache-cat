@@ -14,3 +14,4 @@ res = r.zadd('333', {
     'wangwu': 19  # member: 'wangwu', score: 19
 })
 print(res)
+print(r.zrange('333', 0, -1))

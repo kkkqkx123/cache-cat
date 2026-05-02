@@ -1,5 +1,6 @@
 use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
+use crate::protocol::hash::hget::HGetCommand;
 use crate::protocol::hash::hset::HSetCommand;
 use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::expire::ExpireCommand;
@@ -12,14 +13,14 @@ use crate::protocol::string::incrby::IncrByCommand;
 use crate::protocol::string::mget::MgetCommand;
 use crate::protocol::string::mset::MsetCommand;
 use crate::protocol::string::set::SetCommand;
+use crate::protocol::zset::zadd::ZAddCommand;
+use crate::protocol::zset::zrange::ZRangeCommand;
 use crate::raft::network::rpc::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::ExpireReq;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
-use crate::protocol::hash::hget::HGetCommand;
-use crate::protocol::zset::zadd::ZAddCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -65,8 +66,7 @@ impl CommandFactory {
         factory.register("HSET", HSetCommand);
         factory.register("HGET", HGetCommand);
         factory.register("ZADD", ZAddCommand);
-
-
+        factory.register("ZRANGE", ZRangeCommand);
         factory
     }
 
