@@ -1,7 +1,7 @@
 use crate::raft::types::core::cache::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::SortedSet;
 use crate::raft::types::core::value_object::ValueObject::ZSet;
-use crate::raft::types::core::value_object::{SortedSet, ValueObject};
 use crate::raft::types::entry::bae_operation::ZAddReq;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -30,9 +30,7 @@ impl MyCache {
                     let changed_count = zset.lock().zadd(zadd.clone());
                     Value::Integer(changed_count)
                 }
-                _ => {
-                    Value::Error("zadd: key is not a zset".to_string())
-                }
+                _ => Value::Error("zadd: key is not a zset".to_string()),
             },
         }
     }

@@ -17,7 +17,6 @@ use crate::protocol::zset::zadd::ZAddCommand;
 use crate::protocol::zset::zrange::ZRangeCommand;
 use crate::raft::network::rpc::RedisServer;
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::ExpireReq;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;

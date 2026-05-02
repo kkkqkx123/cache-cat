@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SortedSet {
-    tree: BTreeMap<OrderedFloat<f64>, Vec<Arc<Vec<u8>>>>,
+    tree: BTreeMap<(OrderedFloat<f64>, Arc<Vec<u8>>), ()>,
     hash: HashMap<Arc<Vec<u8>>, f64>,
 }
 
@@ -19,128 +19,94 @@ impl SortedSet {
         }
     }
     pub fn zadd(&mut self, req: ZAddReq) -> i64 {
-        let gt = req.gt;
-        let lt = req.lt;
-        let nx = req.nx;
-        let xx = req.xx;
-        let ch = req.ch;
-
-        let mut added_count = 0;
-        let mut changed_count = 0;
+        let mut added = 0;
+        let mut changed = 0;
 
         for (member, score) in req.members {
-            let score = OrderedFloat(score);
-            let existing_score = self.hash.get(&member);
+            let old_score = self.hash.get(&member).cloned();
+            let exists = old_score.is_some();
 
-            // 检查 NX/XX 标志
-            if nx && existing_score.is_some() {
-                // NX: 只添加新元素，已存在则跳过
+            // 1. 处理 NX (只新增) / XX (只更新)
+            if req.nx && exists {
                 continue;
             }
-            if xx && existing_score.is_none() {
-                // XX: 只更新已存在元素，不存在则跳过
+            if req.xx && !exists {
                 continue;
             }
 
-            // 检查 GT/LT 标志
-            if let Some(&existing) = existing_score {
-                if gt && score <= OrderedFloat::from(existing) {
-                    // GT: 仅当新分数大于当前分数时才更新
+            if let Some(old_s) = old_score {
+                // 2. 处理 GT / LT
+                if req.gt && score <= old_s {
                     continue;
                 }
-                if lt && score >= OrderedFloat::from(existing) {
-                    // LT: 仅当新分数小于当前分数时才更新
+                if req.lt && score >= old_s {
                     continue;
                 }
-            }
 
-            // 执行添加或更新
-            if let Some(old_score) = self.hash.insert(Arc::clone(&member), score.0) {
-                // 元素已存在，更新分数
-                let old_score_ordered = OrderedFloat(old_score);
-
-                // 从旧分数的集合中移除该成员
-                if let Some(members) = self.tree.get_mut(&old_score_ordered) {
-                    members.retain(|m| m != &member);
-                    if members.is_empty() {
-                        self.tree.remove(&old_score_ordered);
-                    }
+                // 3. 执行更新
+                if old_s != score {
+                    // 先从 tree 中移除旧的排序节点
+                    self.tree.remove(&(OrderedFloat(old_s), member.clone()));
+                    // 插入新的排序节点
+                    self.tree.insert((OrderedFloat(score), member.clone()), ());
+                    // 更新哈希表
+                    self.hash.insert(member.clone(), score);
+                    changed += 1;
                 }
-
-                // 添加到新分数
-                self.tree
-                    .entry(score)
-                    .or_insert_with(Vec::new)
-                    .push(Arc::clone(&member));
-
-                changed_count += 1;
             } else {
-                // 新元素
-                self.tree
-                    .entry(score)
-                    .or_insert_with(Vec::new)
-                    .push(Arc::clone(&member));
-
-                added_count += 1;
-                changed_count += 1;
+                // 4. 执行新增
+                self.tree.insert((OrderedFloat(score), member.clone()), ());
+                self.hash.insert(member.clone(), score);
+                added += 1;
+                changed += 1;
             }
         }
 
-        // 根据 ch 标志决定返回值
-        if ch { changed_count } else { added_count }
+        if req.ch { changed } else { added }
     }
+
     pub fn zrange(&self, start: i64, stop: i64, with_scores: bool) -> Vec<Vec<u8>> {
-        // (score, member)
-        let mut all: Vec<(f64, &Arc<Vec<u8>>)> = Vec::new();
-
-        for (score, members) in &self.tree {
-            for member in members {
-                all.push((score.0, member));
-            }
-        }
-
-        let len = all.len() as i64;
+        let len = self.hash.len() as i64;
         if len == 0 {
-            return Vec::new();
+            return vec![];
         }
 
-        // Redis 风格索引归一化
-        let normalize = |idx: i64| -> i64 {
-            if idx < 0 {
-                (len + idx).max(0)
-            } else {
-                idx.min(len - 1)
+        // 1. 处理 Redis 负数索引逻辑
+        let mut start_idx = if start < 0 { len + start } else { start };
+        let mut stop_idx = if stop < 0 { len + stop } else { stop };
+
+        // 边界修正
+        if start_idx < 0 { start_idx = 0; }
+        if stop_idx >= len { stop_idx = len - 1; }
+        if start_idx > stop_idx || start_idx >= len {
+            return vec![];
+        }
+
+        let count = (stop_idx - start_idx + 1) as usize;
+
+        // 2. 预分配空间以提高性能
+        // 如果带分数，空间翻倍
+        let result_capacity = if with_scores { count * 2 } else { count };
+        let mut result = Vec::with_capacity(result_capacity);
+
+        // 3. 迭代 BTreeMap 提取数据
+        // tree 的顺序已经是 (Score, Member) 排序好的
+        let range_iter = self.tree.keys()
+            .skip(start_idx as usize)
+            .take(count);
+
+        for (score, member) in range_iter {
+            // 插入成员
+            result.push((**member).clone());
+
+            // 如果需要分数，将 f64 转换为字符串字节
+            if with_scores {
+                let s = score.0.to_string();
+                result.push(s.into_bytes());
             }
-        };
-
-        let start = normalize(start);
-        let stop = normalize(stop);
-
-        if start > stop || start >= len {
-            return Vec::new();
         }
 
-        let slice = &all[start as usize..=stop as usize];
-
-        // 根据 with_scores 决定输出格式
-        if with_scores {
-            let mut result = Vec::with_capacity(slice.len() * 2);
-
-            for (score, member) in slice {
-                // member
-                result.push(member.as_ref().clone());
-
-                // score → 字符串（对齐 Redis）
-                result.push(score.to_string().into_bytes());
-            }
-
-            result
-        } else {
-            slice
-                .iter()
-                .map(|(_, member)| member.as_ref().clone())
-                .collect()
-        }
+        result
     }
 }
 
