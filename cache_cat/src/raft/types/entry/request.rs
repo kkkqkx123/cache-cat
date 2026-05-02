@@ -1,6 +1,7 @@
 use crate::protocol::key::del::DelParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::SetParams;
+use crate::protocol::zset::zadd::ZAddParam;
 use crate::raft::types::entry::bae_operation::BaseOperation;
 use serde::{Deserialize, Serialize};
 use std::fmt;

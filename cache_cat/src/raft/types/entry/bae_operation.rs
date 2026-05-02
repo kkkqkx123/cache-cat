@@ -17,11 +17,11 @@ pub enum BaseOperation {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ZAddReq {
     pub key: Arc<Vec<u8>>,
-    nx: bool,
-    xx: bool,
-    gt: bool,
-    lt: bool,
-    ch: bool,
+    pub nx: bool,
+    pub xx: bool,
+    pub gt: bool,
+    pub lt: bool,
+    pub ch: bool,
     pub members: Vec<(Arc<Vec<u8>>, f64)>,
 }
 impl fmt::Display for ZAddReq {

@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
 use crate::protocol::hash::hget::HGetCommand;
+use crate::protocol::zset::zadd::ZAddCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -63,6 +64,7 @@ impl CommandFactory {
         factory.register("APPEND", AppendCommand);
         factory.register("HSET", HSetCommand);
         factory.register("HGET", HGetCommand);
+        factory.register("ZADD", ZAddCommand);
 
 
         factory

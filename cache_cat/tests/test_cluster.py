@@ -1,7 +1,4 @@
-from time import sleep
-
 import redis
-import time
 
 r = redis.Redis(
     # db=0,
@@ -10,7 +7,10 @@ r = redis.Redis(
     decode_responses=True
 )
 
-r.hset('321', 'name', '123')
 print()
-# 设置 key，1 秒后过期
-print(r.hget('321', 'nam1e'))
+res = r.zadd('333', {
+    'zhangsan': 18,  # member: 'zhangsan', score: 18
+    'lisi': 20,  # member: 'lisi', score: 20
+    'wangwu': 19  # member: 'wangwu', score: 19
+})
+print(res)

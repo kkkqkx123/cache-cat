@@ -267,6 +267,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         }
     }
 }
+
 pub async fn redis_del_hand(
     cache: &MyCache,
     params: DelParams,

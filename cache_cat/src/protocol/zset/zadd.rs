@@ -1,23 +1,46 @@
-use crate::error::{CacheCatError, ProtocolError};
+use crate::error::{CacheCatError, ProtocolError, StorageError};
 use crate::protocol::command::Command;
 use crate::raft::network::rpc::RedisServer;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject::ZSet;
+use crate::raft::types::entry::bae_operation::BaseOperation::ZAdd;
+use crate::raft::types::entry::bae_operation::ZAddReq;
+use crate::raft::types::entry::request::Request;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::sync::Arc;
 
-struct ZAddArgs {
-    key: Vec<u8>,
-    nx: bool,
-    xx: bool,
-    gt: bool,
-    lt: bool,
-    ch: bool,
-    members: Vec<(Vec<u8>, f64)>,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ZAddParam {
+    pub key: Vec<u8>,
+    pub nx: bool,
+    pub xx: bool,
+    pub gt: bool,
+    pub lt: bool,
+    pub ch: bool,
+    pub members: Vec<(Vec<u8>, f64)>,
+}
+impl Display for ZAddParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ZAddParam {{ key: {}, nx: {}, xx: {}, gt: {}, lt: {}, ch: {}, members: {:?} }}",
+            String::from_utf8_lossy(&self.key),
+            self.nx,
+            self.xx,
+            self.gt,
+            self.lt,
+            self.ch,
+            self.members
+        )
+    }
 }
 
 pub struct ZAddCommand;
 
 impl ZAddCommand {
-    fn parse_args(items: &[Value]) -> Result<ZAddArgs, ProtocolError> {
+    fn parse_params(items: &[Value]) -> Result<ZAddParam, ProtocolError> {
         // Minimum: ZADD key score member (4 items)
         if items.len() < 4 {
             return Err(ProtocolError::WrongArgCount("zadd"));
@@ -117,7 +140,7 @@ impl ZAddCommand {
             j += 2;
         }
 
-        Ok(ZAddArgs {
+        Ok(ZAddParam {
             key,
             nx,
             xx,
@@ -138,7 +161,26 @@ impl ZAddCommand {
 #[async_trait]
 impl Command for ZAddCommand {
     async fn execute(&self, items: &[Value], server: &RedisServer) -> Result<Value, CacheCatError> {
-        let args = Self::parse_args(items)?;
-        todo!()
+        let params = Self::parse_params(items)?;
+        let mut elements = Vec::new();
+        for v in params.members {
+            elements.push((Arc::new(v.0), v.1));
+        }
+        let request = Request::Base(ZAdd(ZAddReq {
+            key: Arc::from(params.key),
+            nx: params.nx,
+            xx: params.xx,
+            gt: params.gt,
+            lt: params.lt,
+            ch: params.ch,
+            members: elements,
+        }));
+        let res = server
+            .app
+            .raft
+            .client_write(request)
+            .await
+            .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
+        Ok(res.data)
     }
 }

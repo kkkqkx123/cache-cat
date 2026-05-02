@@ -6,7 +6,6 @@ use crate::raft::types::entry::request::Request;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::hash::{Hash, Hasher};
 
 /// Expiration time options for SET command
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -49,11 +48,7 @@ pub struct SetParams {
     /// Expiration time options (optional)
     pub expiration: Option<Expiration>,
 }
-impl Hash for SetParams {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.key.hash(state);
-    }
-}
+
 impl Display for SetParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
