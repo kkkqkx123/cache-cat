@@ -1,4 +1,5 @@
-use crate::raft::types::core::cache::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::cas::ComputeCommand;
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, LPushReq};
@@ -6,11 +7,48 @@ use crate::raft::types::entry::request::AtomicRequest;
 use moka::ops::compute::{CompResult, Op};
 use parking_lot::lock_api::Mutex;
 use std::collections::VecDeque;
-use std::error::Error;
 use std::sync::Arc;
+
+impl ComputeCommand for LPushReq {
+    fn key(&self) -> Arc<Vec<u8>> {
+        self.key.clone()
+    }
+
+    fn into_base_op(&self) -> BaseOperation {
+        BaseOperation::LPush(self.clone())
+    }
+
+    fn mutate(self, data: &mut ValueObject) -> bool {
+        match data {
+            ValueObject::List(data_arc) => {
+                let mut list = data_arc.lock();
+                for element in self.elements {
+                    list.push_front(element);
+                }
+                true // 锁会在离开这个作用域时自动释放，等同于原代码的 drop(data)
+            }
+            _ => false,
+        }
+    }
+
+    fn init(self) -> ValueObject {
+        ValueObject::List(Arc::from(Mutex::new(VecDeque::from(self.elements))))
+    }
+
+    fn extract(data: &ValueObject) -> Value {
+        match data {
+            ValueObject::List(data_arc) => Value::Integer(data_arc.lock().len() as i64),
+            _ => Value::Error("Key exists but is not a List".to_string()),
+        }
+    }
+}
 
 impl MyCache {
     pub async fn l_push(&self, l_push: LPushReq, update: &mut UpdateType<'_>) -> Value {
+        self.execute_compute(l_push, update).await
+    }
+
+    pub async fn l_push_(&self, l_push: LPushReq, update: &mut UpdateType<'_>) -> Value {
         let result = match update {
             UpdateType::None => {
                 self.cache

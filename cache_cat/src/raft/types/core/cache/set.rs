@@ -1,4 +1,4 @@
-use crate::raft::types::core::cache::moka::{MyCache, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::SAddReq;
 
