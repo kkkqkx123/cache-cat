@@ -2,7 +2,7 @@ use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::now_ms;
 use moka::Expiry;
-use moka::future::Cache;
+use moka::sync::Cache;
 use serde::{Deserialize, Serialize};
 use std::option::Option;
 use std::sync::Arc;

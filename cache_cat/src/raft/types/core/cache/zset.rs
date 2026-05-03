@@ -1,4 +1,4 @@
-use crate::raft::types::core::cache::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::SortedSet;
 use crate::raft::types::core::value_object::ValueObject::ZSet;
@@ -7,22 +7,20 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 
 impl MyCache {
-    pub async fn z_add(&self, zadd: ZAddReq, update: &mut UpdateType<'_>) -> Value {
-        let my_value = self.cache.get(&zadd.key).await;
+    pub fn z_add(&self, zadd: ZAddReq, update: &mut UpdateType<'_>) -> Value {
+        let my_value = self.cache.get(&zadd.key);
         match my_value {
             None => {
                 let mut set = SortedSet::new();
                 let changed_count = set.zadd(zadd.clone());
-                self.cache
-                    .insert(
-                        zadd.key,
-                        MyValue {
-                            version: 1,
-                            data: ZSet(Arc::new(Mutex::new(set))),
-                            expires_at: 0,
-                        },
-                    )
-                    .await;
+                self.cache.insert(
+                    zadd.key,
+                    MyValue {
+                        version: 1,
+                        data: ZSet(Arc::new(Mutex::new(set))),
+                        expires_at: 0,
+                    },
+                );
                 Value::Integer(changed_count)
             }
             Some(data) => match data.data {

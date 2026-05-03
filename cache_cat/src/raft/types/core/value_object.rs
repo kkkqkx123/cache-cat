@@ -70,11 +70,9 @@ impl SortedSet {
         if len == 0 {
             return vec![];
         }
-
         // 1. 处理 Redis 负数索引逻辑
         let mut start_idx = if start < 0 { len + start } else { start };
         let mut stop_idx = if stop < 0 { len + stop } else { stop };
-
         // 边界修正
         if start_idx < 0 {
             start_idx = 0;
@@ -85,9 +83,7 @@ impl SortedSet {
         if start_idx > stop_idx || start_idx >= len {
             return vec![];
         }
-
         let count = (stop_idx - start_idx + 1) as usize;
-
         // 2. 预分配空间以提高性能
         // 如果带分数，空间翻倍
         let result_capacity = if with_scores { count * 2 } else { count };
@@ -107,7 +103,6 @@ impl SortedSet {
                 result.push(s.into_bytes());
             }
         }
-
         result
     }
 }

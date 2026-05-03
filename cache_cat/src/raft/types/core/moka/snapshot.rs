@@ -1,12 +1,5 @@
-use crate::raft::types::core::cache::moka::{MyCache, MyValue, UpdateType};
-use crate::raft::types::core::response_value::Value;
-use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, IncrReq, LPushReq, SetReq};
-use crate::raft::types::entry::request::AtomicRequest;
-use crate::utils::parse_i64;
-use moka::Entry;
-use moka::ops::compute::{CompResult, Op};
-use std::collections::LinkedList;
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+
 use std::sync::Arc;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -63,7 +56,7 @@ impl MyCache {
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             let value: MyValue = bincode2::deserialize(&val_buf)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-            self.cache.insert(Arc::new(key_vec), value).await;
+            self.cache.insert(Arc::new(key_vec), value);
         }
 
         Ok(())

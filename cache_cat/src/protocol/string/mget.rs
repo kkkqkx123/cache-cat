@@ -36,7 +36,7 @@ impl MgetParams {
 /// Get a value from the server
 /// Returns None if key not found or expired.
 async fn get_value(server: &RedisServer, key: &Vec<u8>) -> CacheCatResult<Option<Vec<u8>>> {
-    let value = server.app.state_machine.data.kvs.cache.get(key).await;
+    let value = server.app.state_machine.data.kvs.cache.get(key);
     match value {
         None => Ok(None),
         Some(v) => match v.data {

@@ -1,9 +1,0 @@
-use crate::raft::types::core::cache::moka::{MyCache, UpdateType};
-use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::SAddReq;
-
-impl MyCache {
-    pub async fn s_add(&self, sadd: SAddReq, update: &mut UpdateType<'_>) -> Value {
-        todo!()
-    }
-}

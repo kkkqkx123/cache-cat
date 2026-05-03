@@ -4,9 +4,7 @@ use crate::raft::network::model::{
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::membership::JoinRequest;
 use crate::raft::types::entry::request::Request;
-use crate::raft::types::raft_types::{
-     CacheCatApp, Node, TypeConfig,
-};
+use crate::raft::types::raft_types::{CacheCatApp, Node, TypeConfig};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::StreamExt;
@@ -124,7 +122,7 @@ async fn read(app: Arc<CacheCatApp>, get_req: GetReq) -> Result<GetRes, String> 
     let value = match ret {
         Ok(linearizer) => {
             linearizer.await_ready(&app.raft).await.unwrap();
-            app.state_machine.data.kvs.cache.get(&get_req.key).await
+            app.state_machine.data.kvs.cache.get(&get_req.key)
         }
         Err(e) => return Err(e.to_string()),
     };

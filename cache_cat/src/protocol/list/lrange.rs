@@ -1,7 +1,7 @@
 use crate::error::{CacheCatError, ProtocolError, StorageError};
 use crate::protocol::command::Command;
 use crate::raft::network::rpc::RedisServer;
-use crate::raft::types::core::cache::moka::MyValue;
+use crate::raft::types::core::moka::moka::MyValue;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::utils::lrange;
@@ -61,14 +61,7 @@ impl Command for LRangeCommand {
             .await
             .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
         let read_lock = server.app.state_machine.data.kvs.read_lock.lock().await;
-        let my_value = server
-            .app
-            .state_machine
-            .data
-            .kvs
-            .cache
-            .get(&params.key)
-            .await;
+        let my_value = server.app.state_machine.data.kvs.cache.get(&params.key);
         drop(read_lock);
         match my_value {
             None => Ok(Value::BulkString(None)),

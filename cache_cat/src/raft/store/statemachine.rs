@@ -5,7 +5,7 @@ use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::store::snapshot::snapshot_handler::{
     dump_cache_to_path, get_snapshot_file_name, load_cache_from_path,
 };
-use crate::raft::types::core::cache::moka::{MyCache, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, SetReq};
@@ -162,13 +162,13 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 EntryPayload::Normal(req) => match req {
                     Request::Base(base) => match base {
                         BaseOperation::Set(set) => {
-                            st.set(set, update_type).await;
+                            st.set(set, update_type);
                             Value::ok()
                         }
-                        BaseOperation::Expire(expire) => st.expire(expire, update_type).await,
-                        BaseOperation::LPush(l_push) => st.l_push(l_push, update_type).await,
+                        BaseOperation::Expire(expire) => st.expire(expire, update_type),
+                        BaseOperation::LPush(l_push) => st.l_push(l_push, update_type),
                         BaseOperation::Del(del) => {
-                            if st.del(del, update_type).await {
+                            if st.del(del, update_type) {
                                 Value::Integer(1)
                             } else {
                                 Value::Integer(0)
@@ -176,9 +176,9 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                         }
                         BaseOperation::Incr(incr) => st.incr(incr, update_type).await,
                         BaseOperation::Append(append) => st.append(append, update_type).await,
-                        BaseOperation::HSet(h_set) => st.h_set(h_set, update_type).await,
-                        BaseOperation::ZAdd(z_add) => st.z_add(z_add, update_type).await,
-                        BaseOperation::SAdd(s_add) => st.s_add(s_add, update_type).await,
+                        BaseOperation::HSet(h_set) => st.h_set(h_set, update_type),
+                        BaseOperation::ZAdd(z_add) => st.z_add(z_add, update_type),
+                        BaseOperation::SAdd(s_add) => st.s_add(s_add, update_type),
                     },
                     Request::RedisDel(del) => redis_del_hand(st, del, update_type).await,
                     Request::RedisSet(set) => redis_set_hand(st, set, update_type).await,
@@ -222,31 +222,31 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             let update_type = &mut UpdateType::CAS(atomic_request.version);
             match atomic_request.request {
                 BaseOperation::Set(set) => {
-                    self.data.kvs.set(set, update_type).await;
+                    self.data.kvs.set(set, update_type);
                 }
                 BaseOperation::Expire(expire_req) => {
-                    self.data.kvs.expire(expire_req, update_type).await;
+                    self.data.kvs.expire(expire_req, update_type);
                 }
                 BaseOperation::LPush(l_push) => {
-                    self.data.kvs.l_push(l_push, update_type).await;
+                    self.data.kvs.l_push(l_push, update_type);
                 }
                 BaseOperation::Del(del) => {
-                    self.data.kvs.del(del, update_type).await;
+                    self.data.kvs.del(del, update_type);
                 }
                 BaseOperation::Incr(incr) => {
-                    self.data.kvs.incr(incr, update_type).await;
+                    self.data.kvs.incr(incr, update_type);
                 }
                 BaseOperation::Append(append) => {
-                    self.data.kvs.append(append, update_type).await;
+                    self.data.kvs.append(append, update_type);
                 }
                 BaseOperation::HSet(hset) => {
-                    self.data.kvs.h_set(hset, update_type).await;
+                    self.data.kvs.h_set(hset, update_type);
                 }
                 BaseOperation::ZAdd(zadd) => {
-                    self.data.kvs.z_add(zadd, update_type).await;
+                    self.data.kvs.z_add(zadd, update_type);
                 }
                 BaseOperation::SAdd(sadd) => {
-                    self.data.kvs.s_add(sadd, update_type).await;
+                    self.data.kvs.s_add(sadd, update_type);
                 }
             }
         }
@@ -283,7 +283,7 @@ pub async fn redis_del_hand(
         let del = DelReq {
             key: Arc::from(key),
         };
-        if cache.del(del, update_type).await {
+        if cache.del(del, update_type) {
             count = count + 1;
         }
     }
@@ -302,7 +302,7 @@ pub async fn redis_mset_hand(
             value: Arc::from(pair.1),
             ex_time: 0,
         };
-        cache.set(set, update_type).await;
+        cache.set(set, update_type);
     }
     Value::ok()
 }
@@ -326,7 +326,7 @@ pub async fn redis_set_hand(
     let expires_at = match params.expiration {
         Some(Expiration::KeepTTL) => {
             // Read existing value to get its expiration time
-            match cache.cache.get(&params.key).await {
+            match cache.cache.get(&params.key) {
                 None => NO_EXPIRATION,
                 Some(value) => {
                     let ttl_ms = value.expires_at;
@@ -391,7 +391,7 @@ pub async fn redis_set_hand(
         value: Arc::from(params.value),
         ex_time: expires_at,
     };
-    cache.set(set, update_type).await;
+    cache.set(set, update_type);
     if params.get {
         // Store the old value for GET option before we overwrite
         match existing_key {
