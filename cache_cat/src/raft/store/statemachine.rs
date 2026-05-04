@@ -180,6 +180,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                         BaseOperation::HIncr(h_get) => st.h_incr(h_get, update_type),
                         BaseOperation::ZAdd(z_add) => st.z_add(z_add, update_type),
                         BaseOperation::SAdd(s_add) => st.s_add(s_add, update_type),
+                        BaseOperation::Persist(persist) => st.persist(persist, update_type),
                     },
                     Request::RedisDel(del) => redis_del_hand(st, del, update_type).await,
                     Request::RedisSet(set) => redis_set_hand(st, set, update_type).await,
@@ -251,6 +252,9 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 }
                 BaseOperation::SAdd(sadd) => {
                     self.data.kvs.s_add(sadd, update_type);
+                }
+                BaseOperation::Persist(persist) => {
+                    self.data.kvs.persist(persist, update_type);
                 }
             }
         }

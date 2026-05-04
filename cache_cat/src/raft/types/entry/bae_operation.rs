@@ -15,7 +15,22 @@ pub enum BaseOperation {
     HIncr(HIncrReq),
     ZAdd(ZAddReq),
     SAdd(SAddReq),
+    Persist(PersistReq)
 }
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct PersistReq {
+    pub key: Arc<Vec<u8>>,
+}
+impl fmt::Display for PersistReq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "PersistReq {{ key: {} }}",
+            String::from_utf8_lossy(&self.key)
+        )
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HIncrReq {
     pub key: Arc<Vec<u8>>,

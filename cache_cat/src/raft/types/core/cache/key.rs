@@ -1,11 +1,41 @@
 use crate::protocol::key::expire::ExpireCondition;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, ExpireReq};
+use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, ExpireReq, PersistReq};
 use crate::raft::types::entry::request::AtomicRequest;
 use std::sync::Arc;
 
 impl MyCache {
+    pub fn persist(&self, persist: PersistReq, update: &mut UpdateType<'_>) -> Value {
+        let mut v = match self.cache.get(&persist.key) {
+            Some(v) => v,
+            None => return Value::Integer(0),
+        };
+        v.expires_at = 0;
+        match update {
+            UpdateType::None => {
+                self.cache.insert(persist.key, v);
+            }
+            UpdateType::Snapshot(queue) => {
+                let key = persist.key.clone();
+                v.version = v.version + 1;
+                queue.push(AtomicRequest {
+                    version: v.version,
+                    request: BaseOperation::Persist(persist),
+                });
+
+                self.cache.insert(key, v);
+            }
+            UpdateType::CAS(cas_version) => {
+                if *cas_version - 1 == v.version {
+                    v.version += 1;
+                    self.cache.insert(persist.key, v);
+                }
+            }
+        }
+        Value::Integer(1)
+    }
+
     pub fn expire(&self, expire_req: ExpireReq, update: &mut UpdateType<'_>) -> Value {
         let mut v = match self.cache.get(&expire_req.key) {
             Some(v) => v,
