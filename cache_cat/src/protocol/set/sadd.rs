@@ -52,7 +52,7 @@ impl Command for SAddCommand {
         }
         let request = Request::Base(SAdd(SAddReq {
             key: Arc::from(params.key),
-            members: elements,
+            elements: elements,
         }));
         let res = server
             .app

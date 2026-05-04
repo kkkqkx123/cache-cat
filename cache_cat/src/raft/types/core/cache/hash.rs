@@ -3,7 +3,6 @@ use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, HSetReq};
-use crate::raft::types::entry::request::AtomicRequest;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -42,7 +41,7 @@ impl ComputeCommand for HSetReq {
         let mut map = HashMap::new();
         let len = self.elements.len();
         for (k, v) in self.elements {
-            map.insert(k.clone(), v.clone());
+            map.insert(k, v);
         }
         (
             ValueObject::Hash(Arc::new(Mutex::new(map))),

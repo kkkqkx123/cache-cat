@@ -6,6 +6,7 @@ use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::expire::ExpireCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::list::lrange::LRangeCommand;
+use crate::protocol::set::sadd::SAddCommand;
 use crate::protocol::string::append::AppendCommand;
 use crate::protocol::string::get::GetCommand;
 use crate::protocol::string::incr::IncrCommand;
@@ -66,6 +67,8 @@ impl CommandFactory {
         factory.register("HGET", HGetCommand);
         factory.register("ZADD", ZAddCommand);
         factory.register("ZRANGE", ZRangeCommand);
+        factory.register("SADD", SAddCommand);
+
         factory
     }
 
