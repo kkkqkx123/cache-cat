@@ -22,9 +22,9 @@ for TARGET_NAME in $@; do
 
     rustup target add ${TARGET_PLATFORM}
 
-    cargo zigbuild --release --target ${TARGET_PLATFORM}
+    cargo zigbuild --release --target ${TARGET_PLATFORM} 
 
     mkdir -p target/dist/${TARGET_NAME}
 
-    cp target/${TARGET_PLATFORM}/release/core_raft target/dist/${TARGET_NAME}/
+    cp target/${TARGET_PLATFORM}/release/cache_cat target/dist/${TARGET_NAME}/
 done

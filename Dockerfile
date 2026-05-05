@@ -2,6 +2,6 @@ FROM scratch
 
 ARG TARGETPLATFORM
 
-COPY target/dist/${TARGETPLATFORM}/core_raft /core_raft
+COPY target/dist/${TARGETPLATFORM}/cache_cat /cache_cat
 
-ENTRYPOINT ["/core_raft"]
+ENTRYPOINT ["/cache_cat"]
