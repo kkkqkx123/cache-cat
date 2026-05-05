@@ -7,17 +7,15 @@
 //! - The number of keys that were removed
 //! - 0 if none of the specified keys existed
 
-use crate::protocol::command::Command;
-
 use crate::error::{CacheCatError, ProtocolError, StorageError};
-use crate::raft::network::rpc::RedisServer;
+use crate::protocol::command::Command;
+use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::BaseOperation::Del;
 use crate::raft::types::entry::bae_operation::DelReq;
 use crate::raft::types::entry::request::Request;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -62,9 +60,13 @@ pub struct DelCommand;
 impl Command for DelCommand {
     async fn execute(&self, items: &[Value], server: &RedisServer) -> Result<Value, CacheCatError> {
         let params = DelParams::parse(items)?;
-        let request = Request::Base(Del(DelReq {
-            keys: Arc::from(params.keys),
-        }));
+        let request = if params.keys.len() == 1 {
+            Request::Base(Del(DelReq {
+                key: Arc::new(params.keys[0].clone()),
+            }))
+        } else {
+            Request::RedisDel(params)
+        };
         let res = server
             .app
             .raft

@@ -3,18 +3,22 @@
 //! PING [message]
 //! Returns PONG if no argument is provided, otherwise returns the message.
 
+use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::Command;
-use crate::raft::network::rpc::{RedisServer};
+use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
-use crate::error::{CacheCatError, ProtocolError};
 
 /// PING command handler
 pub struct PingCommand;
 
 #[async_trait]
 impl Command for PingCommand {
-    async fn execute(&self, items: &[Value], _server: &RedisServer)-> Result<Value, CacheCatError> {
+    async fn execute(
+        &self,
+        items: &[Value],
+        _server: &RedisServer,
+    ) -> Result<Value, CacheCatError> {
         // PING can have 0 or 1 argument
         // PING -> PONG
         // PING message -> message

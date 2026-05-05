@@ -13,13 +13,12 @@ pub enum Value {
     BulkString(Option<Vec<u8>>),
     /// Arrays of other values (can be null)
     Array(Option<Vec<Value>>),
-    Null,
 }
 
 impl Value {
-    pub fn none() -> Self {
-        Value::Null
-    }
+    // pub fn none() -> Self {
+    //     Value::Null
+    // }
     /// Create a simple OK response
     pub fn ok() -> Self {
         Value::SimpleString("OK".to_string())
@@ -75,7 +74,6 @@ impl Value {
                     item.encode_to(buf);
                 }
             }
-            Value::Null => {}
         }
     }
 }

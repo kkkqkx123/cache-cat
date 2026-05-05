@@ -1,23 +1,21 @@
 use crate::config::config::Config;
 use crate::error::{Error, Result};
 use crate::node::parsed_config::ParsedConfig;
-use crate::protocol::command::CommandFactory;
 use crate::raft::network::client::RpcClient;
 use crate::raft::network::network::NetworkFactory;
 use crate::raft::network::rpc::Server;
 use crate::raft::store::log_store::LogStore;
 use crate::raft::store::raft_engine::create_raft_engine;
-use crate::raft::store::statemachine::{StateMachineData, StateMachineStore};
-use crate::raft::types::entry::forward::{ForwardRequest, ForwardRequestBody};
+use crate::raft::store::statemachine::StateMachineStore;
 use crate::raft::types::entry::membership::JoinRequest;
-use crate::raft::types::raft_types::{CacheCatApp, Node, NodeId, Raft, TypeConfig};
-use openraft::SnapshotPolicy::{LogsSinceLast, Never};
+use crate::raft::types::raft_types::{CacheCatApp, Node, NodeId};
+use openraft::SnapshotPolicy::LogsSinceLast;
 use openraft::error::{InitializeError, RaftError};
-use openraft::raft::ClientWriteResponse;
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use parking_lot::Mutex;
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::result::Result as StdResult;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, oneshot};
 use tokio::time::sleep;
@@ -40,7 +38,7 @@ impl RaftNode {
         let path = dir.join("");
         let (shutdown_tx, shutdown_rx_for_struct) = broadcast::channel(1);
         let raft_engine = dir.join("raft-engine");
-        let engine = create_raft_engine(raft_engine.clone());
+        let engine = create_raft_engine(raft_engine.clone())?;
         let config = Arc::new(openraft::Config {
             heartbeat_interval: 500,
             election_timeout_min: 699,
@@ -49,8 +47,8 @@ impl RaftNode {
             max_in_snapshot_log_to_keep: 500, //生成快照后要保留的日志数量（以供从节点同步数据）需要大于等于replication_lag_threshold,该参数会影响快照逻辑
             max_append_entries: Some(5000000),
             max_payload_entries: 5000000,
-            snapshot_policy: LogsSinceLast(50),         //LogsSinceLast(100),
-            replication_lag_threshold: 200, //需要大于snapshot_policy
+            snapshot_policy: LogsSinceLast(50), //LogsSinceLast(100),
+            replication_lag_threshold: 200,     //需要大于snapshot_policy
             ..Default::default()
         });
         let group_id = 0;
@@ -77,7 +75,7 @@ impl RaftNode {
             path: dir.join(""),
         };
 
-        let mut node = Self {
+        let node = Self {
             config: ParsedConfig::from(app_config)?,
             app: Arc::new(app),
             shutdown_tx,
@@ -175,7 +173,7 @@ impl RaftNode {
         let client = RpcClient::connect(addr)
             .await
             .map_err(|e| Error::internal(e.to_string()))?;
-        let res: () = client
+        let _res: () = client
             .call(9, join_req)
             .await
             .map_err(|e| Error::internal(e.to_string()))?;
@@ -229,7 +227,7 @@ impl RaftNode {
     }
 
     async fn start_raft_service(raft_node: Arc<Self>) -> Result<()> {
-        let raft_endpoint = raft_node.config.raft_endpoint.clone();
+        let _raft_endpoint = raft_node.config.raft_endpoint.clone();
         let app = raft_node.app.clone();
         // Subscribe to shutdown signal
         let shutdown_rx = raft_node.shutdown_tx.subscribe();
@@ -251,7 +249,7 @@ impl RaftNode {
         match startup_rx.await {
             Ok(Ok(())) => {
                 // Store the handle in RaftNode
-                *raft_node.service_handle.lock().unwrap() = Some(handle);
+                *raft_node.service_handle.lock() = Some(handle);
                 info!("Raft TCP service started successfully");
                 Ok(())
             }

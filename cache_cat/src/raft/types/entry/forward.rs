@@ -1,6 +1,4 @@
 use crate::raft::types::entry::membership::JoinRequest;
-use crate::raft::types::raft_types::TypeConfig;
-use openraft::EntryPayload;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

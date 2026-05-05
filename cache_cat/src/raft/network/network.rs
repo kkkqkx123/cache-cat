@@ -133,7 +133,7 @@ impl RaftNetworkV2<TypeConfig> for TcpNetwork {
     async fn full_snapshot(
         &mut self,
         vote: VoteOf<TypeConfig>,
-        mut snapshot: Snapshot<TypeConfig>,
+        snapshot: Snapshot<TypeConfig>,
         cancel: impl Future<Output = ReplicationClosed> + OptionalSend + 'static,
         option: RPCOption,
     ) -> Result<SnapshotResponse<TypeConfig>, StreamingError<TypeConfig>> {

@@ -7,6 +7,8 @@ use cache_cat::raft::types::entry::bae_operation::{BaseOperation, SetReq};
 use cache_cat::raft::types::entry::request::Request;
 use cache_cat::raft::types::raft_types::TypeConfig;
 use openraft::raft::ClientWriteResponse;
+use redis::RedisResult;
+use redis::aio::MultiplexedConnection;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -37,6 +39,12 @@ struct Args {
     #[arg(short = 'e', long, default_value = "127.0.0.1:5001")]
     endpoints: String,
 
+    #[arg(long, default_value_t = false)]
+    redis: bool,
+
+    #[arg(long, default_value = "127.0.0.1:6379")]
+    redis_endpoints: String,
+
     #[arg(short = 'p', long, default_value_t = 100000)]
     warmup: usize,
 }
@@ -45,6 +53,14 @@ struct Args {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    if args.redis {
+        run_redis_benchmark(args).await
+    } else {
+        run_cachecat_benchmark(args).await
+    }
+}
+
+async fn run_cachecat_benchmark(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let max_connections = if args.mode == "latency" {
         1
     } else {
@@ -118,6 +134,100 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+async fn run_redis_benchmark(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    let max_connections = if args.mode == "latency" {
+        1
+    } else {
+        args.clients
+    };
+
+    println!(">>> 初始化 Redis 连接池: {} 个连接 <<<", max_connections);
+
+    let client = Arc::new(
+        connect_redis_with_num(&args.redis_endpoints, max_connections)
+            .await
+            .expect("Redis 连接失败，请检查端点是否可用"),
+    );
+
+    if args.mode == "latency" {
+        println!(">>> Redis 延迟测试 - 请求数: {} <<<", args.count);
+    } else {
+        println!(
+            ">>> Redis 吞吐量测试 - {}并发/{}请求 <<<",
+            args.clients, args.total
+        );
+        println!(">>> 预热阶段 - 发送 {} 个请求 <<<", args.warmup);
+
+        run_redis_engine(
+            Arc::clone(&client),
+            args.clients,
+            args.warmup,
+            args.op.clone(),
+            true,
+        )
+        .await;
+
+        println!(">>> 预热完成，正式测试即将开始 <<<");
+    }
+    println!(
+        "====== 性能测试开始 | Target: redis | Endpoints: {} | Mode: {} | Op: {} ======",
+        args.redis_endpoints, args.mode, args.op
+    );
+
+    if args.mode == "latency" {
+        run_redis_engine(Arc::clone(&client), 1, args.count, args.op, false).await;
+    } else {
+        run_redis_engine(
+            Arc::clone(&client),
+            args.clients,
+            args.total,
+            args.op,
+            false,
+        )
+        .await;
+    }
+
+    Ok(())
+}
+
+async fn connect_redis_with_num(
+    endpoints: &str,
+    num: usize,
+) -> RedisResult<Vec<MultiplexedConnection>> {
+    let urls = parse_redis_endpoints(endpoints);
+    let mut conns = Vec::with_capacity(num);
+
+    for i in 0..num {
+        let client = redis::Client::open(urls[i % urls.len()].as_str())?;
+        conns.push(client.get_multiplexed_async_connection().await?);
+    }
+
+    Ok(conns)
+}
+
+fn parse_redis_endpoints(endpoints: &str) -> Vec<String> {
+    let urls: Vec<String> = endpoints
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|s| !s.is_empty())
+        .map(normalize_redis_endpoint)
+        .collect();
+
+    if urls.is_empty() {
+        vec![normalize_redis_endpoint("127.0.0.1:6379")]
+    } else {
+        urls
+    }
+}
+
+fn normalize_redis_endpoint(endpoint: &str) -> String {
+    let endpoint = endpoint.trim();
+    if endpoint.starts_with("redis://") || endpoint.starts_with("rediss://") {
+        endpoint.to_string()
+    } else {
+        format!("redis://{}/", endpoint.trim_end_matches('/'))
+    }
 }
 
 async fn run_engine(
@@ -274,6 +384,143 @@ async fn run_engine(
 
     let elapsed = start_time.elapsed();
     print!("\r"); // 清除当前行的进度显示
+
+    if !is_warmup {
+        let final_lats = final_latencies.lock().await;
+        print_stats(&final_lats, elapsed, total_tasks);
+    }
+}
+
+async fn run_redis_engine(
+    client: Arc<Vec<MultiplexedConnection>>,
+    client_num: usize,
+    total_tasks: usize,
+    op_type: String,
+    is_warmup: bool,
+) {
+    let final_latencies = Arc::new(Mutex::new(Vec::with_capacity(total_tasks)));
+    let ops = Arc::new(AtomicI64::new(0));
+    let total_dur_us = Arc::new(AtomicU64::new(0));
+
+    let start_time = Instant::now();
+    let mut handles = vec![];
+
+    let ops_clone = Arc::clone(&ops);
+    let dur_clone = Arc::clone(&total_dur_us);
+    let total_tasks_f = total_tasks as f64;
+
+    if !is_warmup {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                let curr = ops_clone.load(Ordering::Relaxed);
+                if curr >= total_tasks as i64 {
+                    break;
+                }
+
+                let curr_ops = curr as u64;
+                let curr_dur_us = dur_clone.load(Ordering::Relaxed);
+
+                let avg_str = if curr_ops > 0 {
+                    format!("{:?}", Duration::from_micros(curr_dur_us / curr_ops))
+                } else {
+                    "N/A".to_string()
+                };
+
+                print!(
+                    "\r进度: {}/{} ({:.1}%) | 实时TPS: {:.2} | 平均延迟: {}",
+                    curr,
+                    total_tasks,
+                    (curr as f64 / total_tasks_f) * 100.0,
+                    curr as f64 / start_time.elapsed().as_secs_f64(),
+                    avg_str
+                );
+                use std::io::{self, Write};
+                io::stdout().flush().unwrap();
+            }
+        });
+    }
+
+    let tasks_per_client = total_tasks / client_num;
+
+    for cid in 0..client_num {
+        let latencies_c = Arc::clone(&final_latencies);
+        let ops_c = Arc::clone(&ops);
+        let dur_c = Arc::clone(&total_dur_us);
+        let mut conn = client[cid % client.len()].clone();
+
+        let op = op_type.clone();
+        let mode = if client_num == 1 {
+            "latency"
+        } else {
+            "throughput"
+        };
+
+        let handle = tokio::spawn(async move {
+            let mut local_latencies = Vec::with_capacity(tasks_per_client);
+
+            for i in 0..tasks_per_client {
+                let start = Instant::now();
+                let success;
+
+                if op == "write" || op == "pwrite" {
+                    let key = if op == "pwrite" {
+                        format!("test{}", i)
+                    } else {
+                        i.to_string()
+                    };
+                    let value = if op == "pwrite" {
+                        format!("test_value_{}", i)
+                    } else {
+                        String::from("xxx")
+                    };
+
+                    let res: RedisResult<()> = redis::cmd("SET")
+                        .arg(&key)
+                        .arg(&value)
+                        .query_async(&mut conn)
+                        .await;
+                    success = res.is_ok();
+                } else {
+                    let key = i.to_string();
+                    let res: RedisResult<Option<Vec<u8>>> =
+                        redis::cmd("GET").arg(&key).query_async(&mut conn).await;
+                    success = res.is_ok();
+                }
+
+                if success {
+                    let duration = start.elapsed();
+
+                    dur_c.fetch_add(duration.as_micros() as u64, Ordering::Relaxed);
+                    ops_c.fetch_add(1, Ordering::Relaxed);
+                    local_latencies.push(duration);
+
+                    if local_latencies.len() >= 1000 {
+                        let mut global = latencies_c.lock().await;
+                        global.extend(local_latencies.drain(..));
+                    }
+                }
+
+                if mode == "latency" {
+                    sleep(Duration::from_millis(2)).await;
+                }
+            }
+
+            if !local_latencies.is_empty() {
+                let mut global = latencies_c.lock().await;
+                global.extend(local_latencies);
+            }
+        });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        let _ = h.await;
+    }
+
+    let elapsed = start_time.elapsed();
+    print!("\r");
 
     if !is_warmup {
         let final_lats = final_latencies.lock().await;

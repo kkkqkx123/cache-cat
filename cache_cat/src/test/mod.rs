@@ -119,7 +119,7 @@ mod tests {
             value: Arc::from(format!("test_value_{}", 1).into_bytes()),
             ex_time: 0,
         }));
-        
+
         let x: ClientWriteResponse<TypeConfig> =
             client.call(a.clone()).await.expect("write call failed");
         let x: ClientWriteResponse<TypeConfig> =

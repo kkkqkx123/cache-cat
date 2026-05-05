@@ -2,7 +2,6 @@ use bincode2;
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use openraft::raft::ClientWriteResponse;
-use serde::{Serialize, de::DeserializeOwned};
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -153,7 +152,7 @@ impl PipelineMultiClient {
         match client.call(req.clone()).await {
             Ok(res) => Ok(res),
 
-            Err(e) => {
+            Err(_e) => {
                 // 网络错误 → 重连
                 let fresh = PipelineClient::connect(&self.addr)
                     .await

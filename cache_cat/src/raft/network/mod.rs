@@ -5,3 +5,4 @@ pub mod pipeline_client;
 pub mod router;
 pub mod rpc;
 pub mod network;
+pub mod redis_server;

@@ -1,3 +1,3 @@
 [workspace]
-members = ["benchmark", "cache_cat", "core_raft"]
+members = ["benchmark", "cache_cat"]
 resolver = "3"

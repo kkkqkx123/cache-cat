@@ -1,19 +1,31 @@
+use crate::error::{Error, Result};
+use crate::raft::types::raft_types::TypeConfig;
 use openraft::Entry;
 use raft_engine::{Config, Engine, MessageExt, ReadableSize};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
-use crate::raft::types::raft_types::TypeConfig;
 
-pub fn create_raft_engine<P: AsRef<Path>>(path: P) -> Arc<Engine> {
+pub fn create_raft_engine<P: AsRef<Path>>(path: P) -> Result<Arc<Engine>> {
+    //如果找不到路径就创建
+    if !path.as_ref().exists() {
+        std::fs::create_dir_all(path.as_ref())?;
+    }
     let path = path.as_ref().to_string_lossy().into_owned();
     let config = Config {
-        dir: path,
+        dir: path.clone(),
         purge_threshold: ReadableSize::gb(2),
         batch_compression_threshold: ReadableSize::kb(0),
         ..Default::default()
     };
-    Arc::new(Engine::open(config).expect("Open raft engine"))
+    match Engine::open(config) {
+        Ok(raft_engine) => {
+             Ok(Arc::new(raft_engine))
+        }
+        Err(err) => {
+             Err(Error::config(format!("directory does not exist: {},{}", err, path)))
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

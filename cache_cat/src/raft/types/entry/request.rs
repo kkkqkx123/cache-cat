@@ -1,14 +1,19 @@
+use crate::protocol::key::del::DelParams;
+use crate::protocol::key::rename::RenameParams;
+use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::SetParams;
 use crate::raft::types::entry::bae_operation::BaseOperation;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 /// A request to the KV store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Request {
     Base(BaseOperation),
     RedisSet(SetParams),
+    RedisMset(MsetParams),
+    RedisDel(DelParams),
+    RedisRename(RenameParams),
 }
 
 impl fmt::Display for Request {
@@ -19,9 +24,19 @@ impl fmt::Display for Request {
                 BaseOperation::LPush(req) => write!(f, "LPush: {}", req),
                 BaseOperation::Del(req) => write!(f, "DEL: {}", req),
                 BaseOperation::Incr(req) => write!(f, "Incr: {}", req),
+                BaseOperation::Expire(req) => write!(f, "Expire: {}", req),
+                BaseOperation::Append(req) => write!(f, "Append: {}", req),
+                BaseOperation::HSet(req) => write!(f, "HSet: {}", req),
+                BaseOperation::ZAdd(req) => write!(f, "ZAdd: {}", req),
+                BaseOperation::SAdd(req) => write!(f, "SAdd: {}", req),
+                BaseOperation::HIncr(req) => write!(f, "HIncr: {}", req),
+                BaseOperation::Persist(req) => write!(f, "Persist: {}", req),
+                BaseOperation::Insert(insert) => write!(f, "Insert: {}", insert),
             },
-
             Request::RedisSet(req) => write!(f, "RedisSet: {}", req),
+            Request::RedisMset(req) => write!(f, "RedisMset: {}", req),
+            Request::RedisDel(req) => write!(f, "RedisDel: {}", req),
+            Request::RedisRename(rename) => write!(f, "RedisRename: {}", rename),
         }
     }
 }

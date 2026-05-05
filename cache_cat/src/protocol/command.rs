@@ -1,15 +1,30 @@
 use crate::error::CacheCatError;
 use crate::protocol::connection::ping::PingCommand;
+use crate::protocol::hash::hget::HGetCommand;
+use crate::protocol::hash::hincrby::HIncrByCommand;
+use crate::protocol::hash::hset::HSetCommand;
 use crate::protocol::key::del::DelCommand;
+use crate::protocol::key::exists::ExistsCommand;
+use crate::protocol::key::expire::ExpireCommand;
+use crate::protocol::key::persist::PersistCommand;
+use crate::protocol::list::lpush::LPushCommand;
+use crate::protocol::list::lrange::LRangeCommand;
+use crate::protocol::set::sadd::SAddCommand;
+use crate::protocol::string::append::AppendCommand;
 use crate::protocol::string::get::GetCommand;
+use crate::protocol::string::incr::IncrCommand;
+use crate::protocol::string::incrby::IncrByCommand;
+use crate::protocol::string::mget::MgetCommand;
+use crate::protocol::string::mset::MsetCommand;
 use crate::protocol::string::set::SetCommand;
-use crate::raft::network::rpc::RedisServer;
+use crate::protocol::zset::zadd::ZAddCommand;
+use crate::protocol::zset::zrange::ZRangeCommand;
+use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
-use crate::protocol::string::incr::IncrCommand;
-use crate::protocol::string::incrby::IncrByCommand;
+use crate::protocol::key::rename::RenameCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -46,7 +61,21 @@ impl CommandFactory {
         factory.register("PING", PingCommand);
         factory.register("INCR", IncrCommand);
         factory.register("INCRBY", IncrByCommand);
-
+        factory.register("MSET", MsetCommand);
+        factory.register("MGET", MgetCommand);
+        factory.register("LPUSH", LPushCommand);
+        factory.register("LRANGE", LRangeCommand);
+        factory.register("EXPIRE", ExpireCommand);
+        factory.register("APPEND", AppendCommand);
+        factory.register("HSET", HSetCommand);
+        factory.register("HGET", HGetCommand);
+        factory.register("ZADD", ZAddCommand);
+        factory.register("ZRANGE", ZRangeCommand);
+        factory.register("SADD", SAddCommand);
+        factory.register("HINCRBY", HIncrByCommand);
+        factory.register("EXISTS", ExistsCommand);
+        factory.register("PERSIST", PersistCommand);
+        factory.register("RENAME", RenameCommand);
 
         factory
     }

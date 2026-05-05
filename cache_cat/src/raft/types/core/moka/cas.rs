@@ -1,0 +1,138 @@
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::response_value::Value::Integer;
+use crate::raft::types::core::value_object::ValueObject;
+use crate::raft::types::entry::bae_operation::BaseOperation;
+use crate::raft::types::entry::request::AtomicRequest;
+use moka::ops::compute::{CompResult, Op};
+use std::sync::Arc;
+
+pub trait ComputeCommand: Send + 'static {
+    fn key(&self) -> Arc<Vec<u8>>;
+
+    fn into_base_op(&self) -> BaseOperation;
+
+    /// 返回: (是否修改, 返回值)
+    fn mutate(self, value: &mut MyValue) -> (bool, Value);
+
+    /// 返回: (初始化值, 返回值)
+    fn init(self) -> (ValueObject, Value);
+}
+
+impl MyCache {
+    pub fn execute_compute<C>(&self, cmd: C, update: &mut UpdateType<'_>) -> Value
+    where
+        C: ComputeCommand + Clone,
+    {
+        let key = cmd.key();
+        let mut return_value = Integer(0);
+
+        let result = match update {
+            UpdateType::None => self.cache.entry(key).and_compute_with(|maybe_entry| {
+                let cmd = cmd.clone();
+                match maybe_entry {
+                    Some(entry) => {
+                        let mut value = entry.into_value();
+                        let (changed, res) = cmd.mutate(&mut value);
+                        return_value = res;
+
+                        if changed {
+                            value.version += 1;
+                            Op::Put(value)
+                        } else {
+                            Op::Nop
+                        }
+                    }
+                    None => {
+                        let (new_obj, res) = cmd.init();
+                        return_value = res;
+
+                        Op::Put(MyValue {
+                            data: new_obj,
+                            expires_at: 0,
+                            version: 1,
+                        })
+                    }
+                }
+            }),
+
+            UpdateType::Snapshot(queue) => self.cache.entry(key).and_compute_with(|maybe_entry| {
+                let cmd_copy = cmd.clone();
+                let mut next_version = 1;
+
+                let op = match maybe_entry {
+                    Some(entry) => {
+                        let mut value = entry.into_value();
+                        let (changed, res) = cmd.mutate(&mut value);
+                        return_value = res;
+
+                        value.version += 1;
+                        next_version = value.version;
+
+                        if changed { Op::Put(value) } else { Op::Nop }
+                    }
+                    None => {
+                        let (new_obj, res) = cmd.init();
+                        return_value = res;
+
+                        Op::Put(MyValue {
+                            data: new_obj,
+                            expires_at: 0,
+                            version: 1,
+                        })
+                    }
+                };
+
+                queue.push(AtomicRequest {
+                    request: cmd_copy.into_base_op(),
+                    version: next_version,
+                });
+
+                op
+            }),
+
+            UpdateType::CAS(cas_version) => {
+                let expected_version = *cas_version - 1;
+
+                self.cache.entry(key).and_compute_with(|maybe_entry| {
+                    let cmd = cmd.clone();
+                    match maybe_entry {
+                        Some(entry) => {
+                            let mut value = entry.into_value();
+
+                            if value.version != expected_version {
+                                return_value = Value::Integer(0);
+                                return Op::Nop;
+                            }
+
+                            let (changed, res) = cmd.mutate(&mut value);
+                            return_value = res;
+
+                            if changed {
+                                value.version += 1;
+                                Op::Put(value)
+                            } else {
+                                Op::Nop
+                            }
+                        }
+                        None => {
+                            let (new_obj, res) = cmd.init();
+                            return_value = res;
+
+                            Op::Put(MyValue {
+                                data: new_obj,
+                                expires_at: 0,
+                                version: 1,
+                            })
+                        }
+                    }
+                })
+            }
+        };
+
+        match result {
+            CompResult::StillNone(_) => Value::Error("Key not found".into()),
+            _ => return_value,
+        }
+    }
+}

@@ -8,9 +8,8 @@ use serde::Serialize;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::Hasher;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 pub type SnapshotData = tokio::fs::File;
 

@@ -1,8 +1,12 @@
 pub mod command;
 pub mod connection;
+mod hash;
 pub mod key;
+pub mod list;
 pub mod resp;
+pub mod set;
 pub mod string;
+pub mod zset;
 
 /// Current format version for all encoded types (stored in high 4 bits of flags)
 pub const CURRENT_VERSION: u8 = 1;
