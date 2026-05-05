@@ -1,3 +1,5 @@
+use crate::raft::store::raft_engine::MessageExtTyped;
+use crate::raft::types::raft_types::{GroupId, TypeConfig};
 use meta::StoreMeta;
 use openraft::OptionalSend;
 use openraft::RaftLogReader;
@@ -18,8 +20,6 @@ use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::Instrument;
-use crate::raft::store::raft_engine::MessageExtTyped;
-use crate::raft::types::raft_types::{GroupId, TypeConfig};
 
 #[derive(Clone)]
 pub struct LogStore {
@@ -105,7 +105,7 @@ impl RaftLogReader<TypeConfig> for LogStore {
         }
         self.engine
             .fetch_entries_to::<MessageExtTyped>(self.group_id as u64, start, end, None, &mut res)
-            .unwrap();
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Ok(res)
     }
 
@@ -125,7 +125,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
                 match self
                     .engine
                     .get_entry::<MessageExtTyped>(self.group_id as u64, i)
-                    .unwrap()
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                 {
                     None => None, //  get_entry 为 None 也返回 None
                     Some(entry) => Some(entry.log_id()),
@@ -172,7 +172,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         let x: Vec<Entry<TypeConfig>> = entries.into_iter().collect();
         batch
             .add_entries::<MessageExtTyped>(self.group_id as u64, &x)
-            .unwrap();
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         //提前释放
         // 在调用回调函数之前，确保日志已经持久化到磁盘。
         //

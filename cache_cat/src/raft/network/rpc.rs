@@ -143,7 +143,7 @@ async fn pipeline_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: Sock
                         pending_futures.push_back(future);
                     }
                     Some(Err(e)) => {
-                        eprintln!("读取帧失败 ({}): {}", peer_addr, e);
+                        error!("读取帧失败 ({}): {}", peer_addr, e);
                         break;
                     }
                     None => break, // 连接关闭
@@ -155,7 +155,7 @@ async fn pipeline_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: Sock
             Some(res) = pending_futures.next(), if !pending_futures.is_empty() => {
                 let encoded = bincode2::serialize(&res).unwrap();
                 if let Err(e) = writer.send(Bytes::from(encoded)).await {
-                    eprintln!("写入 TCP 失败 ({}): {}", peer_addr, e);
+                    error!("写入 TCP 失败 ({}): {}", peer_addr, e);
                     break;
                 }
             }
@@ -180,7 +180,7 @@ async fn rpc_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAdd
         let mut writer = writer;
         while let Some(payload) = rx.recv().await {
             if let Err(e) = writer.send(payload).await {
-                eprintln!("写入 TCP 失败 ({}): {}", peer_addr, e);
+                error!("写入 TCP 失败 ({}): {}", peer_addr, e);
                 break;
             }
         }
@@ -196,12 +196,12 @@ async fn rpc_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAdd
 
                 tokio::spawn(async move {
                     if let Err(_) = hand(app, tx, package).await {
-                        eprintln!("处理请求失败 {}", peer_addr);
+                        error!("处理请求失败 {}", peer_addr);
                     }
                 });
             }
             Err(e) => {
-                eprintln!("读取帧失败 ({}): {}", peer_addr, e);
+                error!("读取帧失败 ({}): {}", peer_addr, e);
                 break;
             }
         }
@@ -219,7 +219,7 @@ pub async fn hand(
 ) -> Result<(), ()> {
     // 安全解析：至少需要 8 bytes (request_id + func_id)
     if package.len() < 8 {
-        eprintln!("包长度不足：{}", package.len());
+        error!("包长度不足：{}", package.len());
         return Err(());
     }
 

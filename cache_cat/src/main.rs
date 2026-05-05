@@ -10,7 +10,7 @@ use std::error::Error;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{error, info};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -80,7 +80,7 @@ async fn benchmark_requests(apps: Arc<CacheCatApp>) {
     // 等待所有任务完成
     for handle in handles {
         if let Err(e) = handle.await {
-            eprintln!("Task failed: {:?}", e);
+            error!("Task failed: {:?}", e);
         }
     }
 

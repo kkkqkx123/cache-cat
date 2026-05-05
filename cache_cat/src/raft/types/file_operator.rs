@@ -33,7 +33,6 @@ impl FileOperator {
             .as_ref()
             .join("snapshot")
             .join("snapshot.bin");
-        // println!("snapshot_path: {}", snapshot_path.display());
         // 1. 检查文件是否存在
         match fs::metadata(&snapshot_path).await {
             Ok(_) => {
