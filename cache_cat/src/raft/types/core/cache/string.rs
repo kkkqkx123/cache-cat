@@ -93,12 +93,11 @@ impl MyCache {
         };
         match update {
             UpdateType::None => {
-                self.cache.insert(set_req.key.clone(), value);
+                self.cache.insert(set_req.key, value);
             }
             UpdateType::Snapshot(queue) => {
                 let key = set_req.key.clone();
                 self.cache.entry(key).and_upsert_with(|old_entry| {
-                    let set_req = set_req.clone();
                     value.version = if let Some(entry) = old_entry {
                         entry.into_value().version + 1
                     } else {
@@ -125,7 +124,7 @@ impl MyCache {
                             current_val.clone()
                         }
                     } else {
-                        let new_data = ValueObject::String(set_req.value.clone());
+                        let new_data = ValueObject::String(set_req.value);
                         let ttl = set_req.ex_time;
                         MyValue {
                             data: new_data,

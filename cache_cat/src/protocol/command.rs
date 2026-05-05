@@ -25,6 +25,7 @@ use crate::raft::types::entry::bae_operation::BaseOperation::HIncr;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
+use crate::protocol::key::rename::RenameCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -75,6 +76,7 @@ impl CommandFactory {
         factory.register("HINCRBY", HIncrByCommand);
         factory.register("EXISTS", ExistsCommand);
         factory.register("PERSIST", PersistCommand);
+        factory.register("RENAME", RenameCommand);
 
         factory
     }

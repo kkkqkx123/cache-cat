@@ -1,8 +1,12 @@
 use crate::protocol::key::expire::ExpireCondition;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, ExpireReq, PersistReq};
+use crate::raft::types::core::value_object::ValueObject;
+use crate::raft::types::entry::bae_operation::{
+    BaseOperation, DelReq, ExpireReq, InsertReq, PersistReq, SetReq,
+};
 use crate::raft::types::entry::request::AtomicRequest;
+use crate::utils::parse_i64;
 use std::sync::Arc;
 
 impl MyCache {
@@ -110,6 +114,58 @@ impl MyCache {
                     }
                 }
                 false
+            }
+        }
+    }
+
+    pub fn insert(&self, insert_req: InsertReq, update: &mut UpdateType<'_>) {
+        let mut value = MyValue {
+            version: 1,
+            expires_at: insert_req.expires_at,
+            data: insert_req.value.clone(),
+        };
+        match update {
+            UpdateType::None => {
+                self.cache.insert(insert_req.key, value);
+            }
+            UpdateType::Snapshot(queue) => {
+                let key = insert_req.key.clone();
+                self.cache.entry(key).and_upsert_with(|old_entry| {
+                    value.version = if let Some(entry) = old_entry {
+                        entry.into_value().version + 1
+                    } else {
+                        1
+                    };
+                    queue.push(AtomicRequest {
+                        version: value.version,
+                        request: BaseOperation::Insert(insert_req),
+                    });
+                    value
+                });
+            }
+            UpdateType::CAS(cas_version) => {
+                let key = insert_req.key.clone();
+                self.cache.entry(key).and_upsert_with(|maybe_entry| {
+                    if let Some(entry) = maybe_entry {
+                        let current_val = entry.value();
+                        // 核心逻辑：只有传入的 version 与缓存中的 version 相同时才允许更新
+                        if *cas_version - 1 == current_val.version {
+                            value.version += 1;
+                            value
+                        } else {
+                            // 版本不匹配，直接返回旧值（即不更新）
+                            current_val.clone()
+                        }
+                    } else {
+                        let new_data = insert_req.value;
+                        let ttl = insert_req.expires_at;
+                        MyValue {
+                            data: new_data,
+                            expires_at: ttl,
+                            version: 1, // 初始版本
+                        }
+                    }
+                });
             }
         }
     }

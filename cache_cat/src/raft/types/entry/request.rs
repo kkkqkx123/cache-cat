@@ -1,7 +1,7 @@
 use crate::protocol::key::del::DelParams;
+use crate::protocol::key::rename::RenameParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::SetParams;
-use crate::protocol::zset::zadd::ZAddParam;
 use crate::raft::types::entry::bae_operation::BaseOperation;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -13,6 +13,7 @@ pub enum Request {
     RedisSet(SetParams),
     RedisMset(MsetParams),
     RedisDel(DelParams),
+    RedisRename(RenameParams),
 }
 
 impl fmt::Display for Request {
@@ -30,10 +31,12 @@ impl fmt::Display for Request {
                 BaseOperation::SAdd(req) => write!(f, "SAdd: {}", req),
                 BaseOperation::HIncr(req) => write!(f, "HIncr: {}", req),
                 BaseOperation::Persist(req) => write!(f, "Persist: {}", req),
+                BaseOperation::Insert(insert) => write!(f, "Insert: {}", insert),
             },
             Request::RedisSet(req) => write!(f, "RedisSet: {}", req),
             Request::RedisMset(req) => write!(f, "RedisMset: {}", req),
             Request::RedisDel(req) => write!(f, "RedisDel: {}", req),
+            Request::RedisRename(rename) => write!(f, "RedisRename: {}", rename),
         }
     }
 }

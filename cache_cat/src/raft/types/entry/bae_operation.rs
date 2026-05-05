@@ -1,23 +1,49 @@
 use crate::protocol::key::expire::ExpireCondition;
+use crate::raft::types::core::value_object::ValueObject;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BaseOperation {
-    Set(SetReq),
+    // key
     Del(DelReq),
-    LPush(LPushReq),
-    Incr(IncrReq),
     Expire(ExpireReq),
+    Persist(PersistReq),
+    Insert(InsertReq),
+    //string
+    Set(SetReq),
+    Incr(IncrReq),
     Append(AppendReq),
+    // list
+    LPush(LPushReq),
+    //hash
     HSet(HSetReq),
     HIncr(HIncrReq),
+    // zset
     ZAdd(ZAddReq),
+    // set
     SAdd(SAddReq),
-    Persist(PersistReq)
 }
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InsertReq {
+    pub key: Arc<Vec<u8>>,
+    pub value: ValueObject,
+    pub expires_at: u64,
+}
+impl fmt::Display for InsertReq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "InsertReq {{ key: {}, value: {:?}, expires_at: {} }}",
+            String::from_utf8_lossy(&self.key),
+            self.value,
+            self.expires_at
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PersistReq {
     pub key: Arc<Vec<u8>>,
 }
@@ -31,7 +57,7 @@ impl fmt::Display for PersistReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HIncrReq {
     pub key: Arc<Vec<u8>>,
     pub field: Arc<Vec<u8>>,
@@ -49,7 +75,7 @@ impl fmt::Display for HIncrReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SAddReq {
     pub key: Arc<Vec<u8>>,
     pub elements: Vec<Arc<Vec<u8>>>,
@@ -65,7 +91,7 @@ impl fmt::Display for SAddReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ZAddReq {
     pub key: Arc<Vec<u8>>,
     pub nx: bool,
@@ -91,7 +117,7 @@ impl fmt::Display for ZAddReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HSetReq {
     pub key: Arc<Vec<u8>>,
     pub elements: Vec<(Arc<Vec<u8>>, Arc<Vec<u8>>)>,
@@ -107,7 +133,7 @@ impl fmt::Display for HSetReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppendReq {
     pub key: Arc<Vec<u8>>,
     pub value: Arc<Vec<u8>>,
@@ -123,7 +149,7 @@ impl fmt::Display for AppendReq {
         )
     }
 }
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExpireReq {
     pub key: Arc<Vec<u8>>,
     pub expires_at: u64,
@@ -141,7 +167,7 @@ impl fmt::Display for ExpireReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IncrReq {
     pub key: Arc<Vec<u8>>,
     pub value: i64,
@@ -155,7 +181,7 @@ impl fmt::Display for IncrReq {
         )
     }
 }
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SetReq {
     pub key: Arc<Vec<u8>>,
     pub value: Arc<Vec<u8>>,
@@ -173,7 +199,7 @@ impl fmt::Display for SetReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LPushReq {
     pub key: Arc<Vec<u8>>,
     pub elements: Vec<Arc<Vec<u8>>>,
@@ -189,7 +215,7 @@ impl fmt::Display for LPushReq {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DelReq {
     pub key: Arc<Vec<u8>>,
 }

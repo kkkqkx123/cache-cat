@@ -1,14 +1,15 @@
 use crate::protocol::NO_EXPIRATION;
 use crate::protocol::key::del::DelParams;
+use crate::protocol::key::rename::RenameParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::store::snapshot::snapshot_handler::{
     dump_cache_to_path, get_snapshot_file_name, load_cache_from_path,
 };
-use crate::raft::types::core::moka::moka::{MyCache, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, SetReq};
+use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, InsertReq, SetReq};
 use crate::raft::types::entry::request::{AtomicRequest, Request};
 use crate::raft::types::file_operator::FileOperator;
 use crate::raft::types::raft_types::{NodeId, TypeConfig};
@@ -181,10 +182,17 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                         BaseOperation::ZAdd(z_add) => st.z_add(z_add, update_type),
                         BaseOperation::SAdd(s_add) => st.s_add(s_add, update_type),
                         BaseOperation::Persist(persist) => st.persist(persist, update_type),
+                        BaseOperation::Insert(insert) => {
+                            st.insert(insert, update_type);
+                            Value::ok()
+                        }
                     },
                     Request::RedisDel(del) => redis_del_hand(st, del, update_type).await,
                     Request::RedisSet(set) => redis_set_hand(st, set, update_type).await,
                     Request::RedisMset(mset) => redis_mset_hand(st, mset, update_type).await,
+                    Request::RedisRename(rename) => {
+                        redis_rename_hand(st, rename, update_type).await
+                    }
                 },
                 EntryPayload::Membership(mem) => {
                     raft_meta.last_membership =
@@ -256,6 +264,9 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 BaseOperation::Persist(persist) => {
                     self.data.kvs.persist(persist, update_type);
                 }
+                BaseOperation::Insert(insert) => {
+                    self.data.kvs.insert(insert, update_type);
+                }
             }
         }
         self.update_meta_data(res.0).await;
@@ -278,6 +289,31 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             }
         }
     }
+}
+
+pub async fn redis_rename_hand(
+    cache: &MyCache,
+    params: RenameParams,
+    update_type: &mut UpdateType<'_>,
+) -> Value {
+    let _exclusive_lock = cache.read_lock.lock().await;
+
+    let my_value = match cache.cache.get(&params.key) {
+        None => return Value::Error("no such key".to_string()),
+        Some(value) => value,
+    };
+    let del = DelReq {
+        key: Arc::from(params.key),
+    };
+    cache.del(del, update_type);
+    let new_key: Arc<Vec<u8>> = Arc::from(params.new_key);
+    let insert = InsertReq {
+        key: new_key.clone(),
+        value: my_value.data,
+        expires_at: my_value.expires_at,
+    };
+    cache.insert(insert, update_type);
+    Value::ok()
 }
 
 pub async fn redis_del_hand(
