@@ -17,12 +17,13 @@ impl MyCache {
             UpdateType::None => {
                 self.cache.insert(persist.key, v);
             }
-            UpdateType::Snapshot(queue) => {
+            UpdateType::Snapshot(queue, write_clock) => {
                 let key = persist.key.clone();
                 v.version = v.version + 1;
                 queue.push(AtomicRequest {
                     version: v.version,
                     request: BaseOperation::Persist(persist),
+                    write_clock: *write_clock,
                 });
 
                 self.cache.insert(key, v);
@@ -60,12 +61,13 @@ impl MyCache {
             UpdateType::None => {
                 self.cache.insert(expire_req.key, v);
             }
-            UpdateType::Snapshot(queue) => {
+            UpdateType::Snapshot(queue, write_clock) => {
                 let key = expire_req.key.clone();
                 v.version = v.version + 1;
                 queue.push(AtomicRequest {
                     version: v.version,
                     request: BaseOperation::Expire(expire_req),
+                    write_clock: *write_clock,
                 });
 
                 self.cache.insert(key, v);
@@ -88,7 +90,7 @@ impl MyCache {
                 existed.is_some()
             }
 
-            UpdateType::Snapshot(queue) => {
+            UpdateType::Snapshot(queue, write_clock) => {
                 // 计算 version
                 let version = if let Some(entry) = self.cache.get(&del_req.key) {
                     entry.version + 1
@@ -98,6 +100,7 @@ impl MyCache {
                 queue.push(AtomicRequest {
                     version,
                     request: BaseOperation::Del(del_req.clone()),
+                    write_clock: *write_clock,
                 });
 
                 let existed = self.cache.remove(&del_req.key);
@@ -125,7 +128,7 @@ impl MyCache {
             UpdateType::None => {
                 self.cache.insert(insert_req.key, value);
             }
-            UpdateType::Snapshot(queue) => {
+            UpdateType::Snapshot(queue, write_clock) => {
                 let key = insert_req.key.clone();
                 self.cache.entry(key).and_upsert_with(|old_entry| {
                     value.version = if let Some(entry) = old_entry {
@@ -136,6 +139,7 @@ impl MyCache {
                     queue.push(AtomicRequest {
                         version: value.version,
                         request: BaseOperation::Insert(insert_req),
+                        write_clock: *write_clock,
                     });
                     value
                 });

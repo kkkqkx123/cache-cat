@@ -56,40 +56,43 @@ impl MyCache {
                 }
             }),
 
-            UpdateType::Snapshot(queue) => self.cache.entry(key).and_compute_with(|maybe_entry| {
-                let cmd_copy = cmd.clone();
-                let mut next_version = 1;
+            UpdateType::Snapshot(queue, write_clock) => {
+                self.cache.entry(key).and_compute_with(|maybe_entry| {
+                    let cmd_copy = cmd.clone();
+                    let mut next_version = 1;
 
-                let op = match maybe_entry {
-                    Some(entry) => {
-                        let mut value = entry.into_value();
-                        let (changed, res) = cmd.mutate(&mut value);
-                        return_value = res;
+                    let op = match maybe_entry {
+                        Some(entry) => {
+                            let mut value = entry.into_value();
+                            let (changed, res) = cmd.mutate(&mut value);
+                            return_value = res;
 
-                        value.version += 1;
-                        next_version = value.version;
+                            value.version += 1;
+                            next_version = value.version;
 
-                        if changed { Op::Put(value) } else { Op::Nop }
-                    }
-                    None => {
-                        let (new_obj, res) = cmd.init();
-                        return_value = res;
+                            if changed { Op::Put(value) } else { Op::Nop }
+                        }
+                        None => {
+                            let (new_obj, res) = cmd.init();
+                            return_value = res;
 
-                        Op::Put(MyValue {
-                            data: new_obj,
-                            expires_at: 0,
-                            version: 1,
-                        })
-                    }
-                };
+                            Op::Put(MyValue {
+                                data: new_obj,
+                                expires_at: 0,
+                                version: 1,
+                            })
+                        }
+                    };
 
-                queue.push(AtomicRequest {
-                    request: cmd_copy.into_base_op(),
-                    version: next_version,
-                });
+                    queue.push(AtomicRequest {
+                        request: cmd_copy.into_base_op(),
+                        version: next_version,
+                        write_clock: *write_clock,
+                    });
 
-                op
-            }),
+                    op
+                })
+            }
 
             UpdateType::CAS(cas_version) => {
                 let expected_version = *cas_version - 1;

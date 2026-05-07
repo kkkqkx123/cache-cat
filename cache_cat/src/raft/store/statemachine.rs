@@ -151,7 +151,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         let mut guard;
         let update_type = if raft_meta.snapshot_state {
             guard = self.data.incremental_operation_queue.lock().await;
-            &mut UpdateType::Snapshot(&mut guard)
+            &mut UpdateType::Snapshot(&mut guard,0)
         } else {
             &mut UpdateType::None
         };
@@ -163,6 +163,13 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                 EntryPayload::Normal(req) => match req {
                     Request::Base(time, base) => {
                         let write_clock = st.set_write_clock(time);
+                        match update_type {
+                            UpdateType::Snapshot(_, count) => {
+                                // 直接修改 count（因为匹配到的 count 是可变的）
+                                *count = write_clock;
+                            }
+                            _ => {}
+                        }
                         match base {
                             BaseOperation::Set(set) => {
                                 st.set(set, update_type);

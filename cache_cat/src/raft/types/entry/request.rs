@@ -50,4 +50,5 @@ impl fmt::Display for Request {
 pub struct AtomicRequest {
     pub request: BaseOperation,
     pub version: u32,
+    pub write_clock: u64,
 }

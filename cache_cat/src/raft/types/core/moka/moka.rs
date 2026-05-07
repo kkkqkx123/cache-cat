@@ -112,6 +112,10 @@ impl MyCache {
         max(old_value, new_clock)
     }
 
+    pub fn get_write_clock(&self) -> u64 {
+        self.write_logic_clock.load(Ordering::Acquire)
+    }
+
     /// 创建 MyCache 时自动初始化内部 Cache
     pub fn new() -> Self {
         let write_logic_clock = Arc::new(AtomicU64::new(0));
@@ -158,6 +162,6 @@ impl MyCache {
 }
 pub enum UpdateType<'a> {
     None,
-    Snapshot(&'a mut Vec<AtomicRequest>),
+    Snapshot(&'a mut Vec<AtomicRequest>, u64),
     CAS(u32),
 }
