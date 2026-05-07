@@ -40,7 +40,6 @@ openraft::declare_raft_types!(
 
 pub struct CacheCatApp {
     pub node_id: NodeId,
-    pub addr: String,
     pub raft: Raft,
     pub state_machine: StateMachineStore,
     pub path: PathBuf,

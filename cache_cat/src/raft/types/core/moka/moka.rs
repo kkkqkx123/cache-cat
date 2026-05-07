@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::option::Option;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::time;
@@ -74,6 +74,8 @@ impl Expiry<Arc<Vec<u8>>, MyValue> for MyExpiry {
 
 #[derive(Debug, Clone)]
 pub struct MyCache {
+    // 在固定间隔内是否发生过删除操作
+    pub have_deleted: Arc<AtomicBool>,
     // 内部 Cache的Clone成本是低廉的
     pub cache: Cache<Arc<Vec<u8>>, MyValue>,
     // 这俩把锁是为了保证每条指令的原子性 多key写，多key读需要同时获取俩把锁 同时获取俩把锁时 先加write_lock
@@ -119,27 +121,24 @@ impl MyCache {
     }
 
     /// 创建 MyCache 时自动初始化内部 Cache
-    pub fn new(cleaning_interval: u64) -> Self {
+    pub fn new() -> Self {
+        let have_deleted = Arc::new(AtomicBool::new(false));
         let write_logic_clock = Arc::new(AtomicU64::new(0));
+        let deleted = have_deleted.clone();
         let cache = Cache::builder()
             // .max_capacity(max_capacity)
             .expire_after(MyExpiry {
                 write_logic_clock: write_logic_clock.clone(),
             })
+            .eviction_listener(move |k, v, cause| {
+                //如果有缓存数据被删除
+                deleted.store(true, Ordering::Release)
+            })
             .build();
-
-        //后台任务
-        let back = cache.clone();
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(cleaning_interval));
-            loop {
-                interval.tick().await;
-                back.run_pending_tasks();
-            }
-        });
 
         Self {
             cache,
+            have_deleted,
             write_lock: Arc::new(Mutex::new(())),
             read_lock: Arc::new(Mutex::new(())),
             read_logic_clock: Arc::new(AtomicU64::new(0)),

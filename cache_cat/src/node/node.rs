@@ -32,8 +32,7 @@ pub struct RaftNode {
 }
 
 impl RaftNode {
-    pub async fn create(app_config: &Config) -> Result<RaftNode> {
-        let config = ParsedConfig::from(app_config)?;
+    pub async fn create(config: ParsedConfig) -> Result<RaftNode> {
         let node_id = config.node_id as NodeId;
         let dir = Path::new(&config.log_path);
         let path = dir.join("");
@@ -54,7 +53,7 @@ impl RaftNode {
         });
         let group_id = 0;
         let log_store = LogStore::new(group_id, engine.clone());
-        let sm_store = StateMachineStore::new(config.clone(),path.clone(), node_id).await?;
+        let sm_store = StateMachineStore::new(config.clone(), path.clone(), node_id).await?;
         let network = NetworkFactory {};
         let raft = openraft::Raft::new(
             node_id,
@@ -67,7 +66,6 @@ impl RaftNode {
         .map_err(|e| Error::internal(format!("Failed to create raft: {}", e)))?;
         let app = CacheCatApp {
             node_id,
-            addr: app_config.raft.address.clone(),
             raft,
             state_machine: sm_store,
             path: dir.join(""),

@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BaseOperation {
+    // 只是用来推动时钟
+    None,
     // key
     Del(DelReq),
     Expire(ExpireReq),
