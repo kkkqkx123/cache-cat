@@ -26,6 +26,7 @@ use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
+use crate::protocol::connection::save::SaveCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -78,7 +79,7 @@ impl CommandFactory {
         factory.register("PERSIST", PersistCommand);
         factory.register("RENAME", RenameCommand);
         factory.register("BGSAVE", BgsaveCommand);
-
+        factory.register("SAVE", SaveCommand);
         factory
     }
 

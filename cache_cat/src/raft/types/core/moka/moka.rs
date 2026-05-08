@@ -1,4 +1,3 @@
-use crate::node::parsed_config::ParsedConfig;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::now_ms;
@@ -11,7 +10,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use tokio::time;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MyValue {

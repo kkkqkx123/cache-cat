@@ -18,5 +18,9 @@ try:
     print(conn.read_response())
     print(conn.read_response())
 
+
+    conn.send_command("BGSAVE SCHEDULE")
+    conn.send_command("BGSAVE SCHEDULE")
+
 finally:
     r.connection_pool.release(conn)

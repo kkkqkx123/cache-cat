@@ -27,6 +27,8 @@ r = redis.Redis(
 # print(r.get('test7'))
 # 1秒过期
 r.set('test10', 'test')
-print(r.bgsave())
+# print(r.save())
+print(r.bgsave(True))
+print(r.bgsave(True))
 # sleep(0.99)
 # print(r.get('test8'))

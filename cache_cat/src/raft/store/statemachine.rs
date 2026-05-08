@@ -14,7 +14,6 @@ use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, InsertReq,
 use crate::raft::types::entry::request::{AtomicRequest, RedisOperation, Request};
 use crate::raft::types::file_operator::FileOperator;
 use crate::raft::types::raft_types::{NodeId, TypeConfig};
-use crate::utils::now_ms;
 use futures::Stream;
 use futures::TryStreamExt;
 use openraft::storage::EntryResponder;
@@ -25,7 +24,7 @@ use openraft::{RaftSnapshotBuilder, RaftTypeConfig};
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 
 //快照存在三个阶段，开始，收尾，结束
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -70,11 +69,14 @@ pub struct StateMachineData {
 
     // 只有俩个任务会获取这个锁，快照和raft主任务。它们都是单线程的。 启动的时候也可能被获取但这不影响性能。
     pub raft_meta_data: Arc<Mutex<RaftMetaData>>,
+
+    pub snapshot_message: broadcast::Sender<()>,
 }
 
 impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
     //这里是clone了一个self 然后调用build_snapshot
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, io::Error> {
+        tracing::info!("Starting snapshot...");
         let mut raft_meta = self.data.raft_meta_data.lock().await;
         if raft_meta.snapshot_state == SnapshotState::Start {
             // 经过测试，openraft保证build_snapshot在每个组中最多同时存在一个，理论上这里永远不会输出
@@ -102,7 +104,7 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
             .load_meta_data()
             .await?
             .ok_or(io::Error::new(io::ErrorKind::Other, "meta data is empty"))?;
-
+        _ = self.data.snapshot_message.send(());
         Ok(Snapshot {
             meta: meta_data,
             snapshot: file_operator,
@@ -116,9 +118,11 @@ impl StateMachineStore {
         path: PathBuf,
         node_id: NodeId,
     ) -> Result<StateMachineStore, io::Error> {
+        let (tx, _) = broadcast::channel::<()>(2);
         let cache = MyCache::new();
         let mut sm = Self {
             data: StateMachineData {
+                snapshot_message: tx,
                 kvs: cache.clone(),
                 incremental_operation_queue: Arc::new(Mutex::new(Vec::new())),
                 raft_meta_data: Arc::new(Mutex::new(RaftMetaData {
