@@ -26,6 +26,7 @@ r = redis.Redis(
 # print(r.rename('test6', 'test7'))
 # print(r.get('test7'))
 # 1秒过期
-r.set('test9', 'test', ex=1)
+r.set('test10', 'test')
+print(r.bgsave())
 # sleep(0.99)
 # print(r.get('test8'))

@@ -1,4 +1,5 @@
 use crate::raft::store::statemachine::RaftMetaData;
+use crate::raft::store::statemachine::SnapshotState::{End, Tail};
 use crate::raft::types::core::moka::moka::MyCache;
 use crate::raft::types::entry::request::AtomicRequest;
 use crate::raft::types::raft_types::TypeConfig;
@@ -69,9 +70,9 @@ where
     //将所有期间的操作写入
     dump_operation_queue_to_writer(&mut writer, queue).await?;
 
-    //在最耗时的刷盘工作开始前将快照标记为已经结束
+    //在最耗时的刷盘工作开始前将快照标记为已经收尾
     let mut raft_meta_data = raft_meta.lock().await;
-    raft_meta_data.snapshot_state = false;
+    raft_meta_data.snapshot_state = Tail;
     let snapshot_meta = SnapshotMeta {
         last_log_id: raft_meta_data.last_applied_log_id.clone(),
         last_membership: raft_meta_data.last_membership.clone(),
@@ -84,8 +85,7 @@ where
     let result = bincode2::serialize(&cache_cat_snapshot_meta)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     drop(raft_meta_data);
-    //写入增量操作队列。
-
+    //回填数据
     writer.seek(SeekFrom::Start(5)).await?;
     writer.write_u32(result.len() as u32).await?;
     writer.write_all(&result).await?;
@@ -95,7 +95,8 @@ where
 
     // 通过 rename 原子替换目标文件
     fs::rename(&temp_path, &final_path).await?;
-
+    let mut meta_data = raft_meta.lock().await;
+    meta_data.snapshot_state = End;
     Ok(())
 }
 

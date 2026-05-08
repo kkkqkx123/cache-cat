@@ -1,4 +1,5 @@
 use crate::error::CacheCatError;
+use crate::protocol::connection::bgsave::BgsaveCommand;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::hash::hget::HGetCommand;
 use crate::protocol::hash::hincrby::HIncrByCommand;
@@ -7,6 +8,7 @@ use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::exists::ExistsCommand;
 use crate::protocol::key::expire::ExpireCommand;
 use crate::protocol::key::persist::PersistCommand;
+use crate::protocol::key::rename::RenameCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::list::lrange::LRangeCommand;
 use crate::protocol::set::sadd::SAddCommand;
@@ -24,7 +26,6 @@ use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
-use crate::protocol::key::rename::RenameCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -76,6 +77,7 @@ impl CommandFactory {
         factory.register("EXISTS", ExistsCommand);
         factory.register("PERSIST", PersistCommand);
         factory.register("RENAME", RenameCommand);
+        factory.register("BGSAVE", BgsaveCommand);
 
         factory
     }

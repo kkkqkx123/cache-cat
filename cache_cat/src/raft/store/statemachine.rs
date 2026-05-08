@@ -27,14 +27,29 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+//快照存在三个阶段，开始，收尾，结束
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub enum SnapshotState {
+    #[default]
+    End,
+    Start,
+    Tail,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RaftMetaData {
-    //快照状态 true为开始 false为结束
-    pub snapshot_state: bool,
+    //快照状态
+    pub snapshot_state: SnapshotState,
 
     pub last_applied_log_id: Option<LogId<TypeConfig>>,
 
     pub last_membership: StoredMembership<TypeConfig>,
+}
+
+impl RaftMetaData {
+    pub fn snapshot_state(&self) -> bool {
+        self.snapshot_state != SnapshotState::End
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -54,19 +69,19 @@ pub struct StateMachineData {
     pub incremental_operation_queue: Arc<Mutex<Vec<AtomicRequest>>>,
 
     // 只有俩个任务会获取这个锁，快照和raft主任务。它们都是单线程的。 启动的时候也可能被获取但这不影响性能。
-    raft_meta_data: Arc<Mutex<RaftMetaData>>,
+    pub raft_meta_data: Arc<Mutex<RaftMetaData>>,
 }
 
 impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
     //这里是clone了一个self 然后调用build_snapshot
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, io::Error> {
         let mut raft_meta = self.data.raft_meta_data.lock().await;
-        if raft_meta.snapshot_state {
+        if raft_meta.snapshot_state == SnapshotState::Start {
             // 经过测试，openraft保证build_snapshot在每个组中最多同时存在一个，理论上这里永远不会输出
             tracing::error!("Unexpected errors, repeated snapshots!")
         }
         //开始快照
-        raft_meta.snapshot_state = true;
+        raft_meta.snapshot_state = SnapshotState::Start;
         drop(raft_meta);
         //快照开始 此时快照线程和raft线程同时执行 快照线程只会读取数据
         let cache = self.data.kvs.clone();
@@ -107,7 +122,7 @@ impl StateMachineStore {
                 kvs: cache.clone(),
                 incremental_operation_queue: Arc::new(Mutex::new(Vec::new())),
                 raft_meta_data: Arc::new(Mutex::new(RaftMetaData {
-                    snapshot_state: false,
+                    snapshot_state: SnapshotState::End,
                     last_applied_log_id: None,
                     last_membership: Default::default(),
                 })),
@@ -154,7 +169,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         let mut raft_meta = self.data.raft_meta_data.lock().await;
         let _lock = self.data.kvs.write_lock.lock().await;
         let mut guard;
-        let update_type = if raft_meta.snapshot_state {
+        let update_type = if raft_meta.snapshot_state == SnapshotState::Start {
             guard = self.data.incremental_operation_queue.lock().await;
             &mut UpdateType::Snapshot(&mut guard, 0)
         } else {
