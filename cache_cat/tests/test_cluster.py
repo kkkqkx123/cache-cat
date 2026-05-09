@@ -3,7 +3,7 @@ from time import sleep
 import redis
 
 r = redis.Redis(
-    # db=1,
+    db=0,
     host='localhost',
     port=6379,
     decode_responses=True
@@ -31,3 +31,14 @@ print(r.get('test10'))
 print(r.save())
 sleep(0.99)
 print(r.get('test8'))
+
+
+r.set('test11', 'test')
+r = redis.Redis(
+    db=1,
+    host='localhost',
+    port=6379,
+    decode_responses=True
+)
+
+r.get('test11')
