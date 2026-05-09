@@ -32,6 +32,8 @@ pub struct ParsedConfig {
 
     /// 在没有请求到来时 多少秒进行一次key的清理 0表示不清理
     pub cleaning_interval: u64,
+
+    pub db_number: u16,
 }
 
 impl ParsedConfig {
@@ -58,6 +60,7 @@ impl ParsedConfig {
             snapshot_policy,
             replication_lag_threshold: config.raft.replication_lag_threshold,
             cleaning_interval: config.cleaning_interval,
+            db_number: 16,
         })
     }
 }

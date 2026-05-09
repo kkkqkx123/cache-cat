@@ -1,5 +1,5 @@
 use crate::raft::types::core::moka::cas::ComputeCommand;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, SAddReq};
@@ -12,7 +12,7 @@ impl ComputeCommand for SAddReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::SAdd(self.clone())
     }
 
@@ -51,7 +51,7 @@ impl ComputeCommand for SAddReq {
 }
 
 impl MyCache {
-    pub fn s_add(&self, sadd: SAddReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn s_add(&self, sadd: SAddReq,update: &mut Update) -> Value {
         self.execute_compute(sadd, update)
     }
 }

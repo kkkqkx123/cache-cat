@@ -145,7 +145,8 @@ async fn read(app: Arc<CacheCatApp>, get_req: GetReq) -> Result<GetRes, String> 
                 .await_ready(&app.raft)
                 .await
                 .map_err(|e| e.to_string())?;
-            app.state_machine.data.kvs.cache.get(&get_req.key)
+            let cache = app.state_machine.data.kvs.get_cache(0).unwrap();
+            cache.get(&get_req.key)
         }
         Err(e) => return Err(e.to_string()),
     };

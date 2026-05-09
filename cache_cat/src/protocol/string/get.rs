@@ -31,7 +31,11 @@ impl GetParams {
 
 /// Get a value from the server
 /// Returns (value, expired) where `expired` is true if the key was expired and deleted.
-async fn get_value(server: &RedisServer, key: &Vec<u8>) -> CacheCatResult<Option<Vec<u8>>> {
+async fn get_value(
+    server: &RedisServer,
+    key: &Vec<u8>,
+    db_number: u16,
+) -> CacheCatResult<Option<Vec<u8>>> {
     let raft = &server.app.raft;
     let linearizer = raft
         .get_read_linearizer(LeaseRead)
@@ -47,7 +51,7 @@ async fn get_value(server: &RedisServer, key: &Vec<u8>) -> CacheCatResult<Option
         .state_machine
         .data
         .kvs
-        .get_value_with_read_clock(key);
+        .get_value_with_read_clock(key, db_number)?;
     drop(lock);
     match value {
         None => Ok(None),
@@ -67,10 +71,15 @@ pub struct GetCommand;
 
 #[async_trait]
 impl Command for GetCommand {
-    async fn execute(&self,db_number: &mut u16, items: &[Value], server: &RedisServer) -> Result<Value, CacheCatError> {
+    async fn execute(
+        &self,
+        db_number: &mut u16,
+        items: &[Value],
+        server: &RedisServer,
+    ) -> Result<Value, CacheCatError> {
         let params = GetParams::parse(items)?;
 
-        match get_value(server, &params.key).await? {
+        match get_value(server, &params.key, *db_number).await? {
             Some(data) => Ok(Value::BulkString(Some(data))),
             None => Ok(Value::BulkString(None)), // Key not found or expired
         }

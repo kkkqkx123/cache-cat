@@ -70,7 +70,7 @@ impl Command for LRangeCommand {
             .state_machine
             .data
             .kvs
-            .get_value_with_read_clock(&params.key);
+            .get_value_with_read_clock(&params.key, *db_number)?;
         drop(read_lock);
         match my_value {
             None => Ok(Value::BulkString(None)),

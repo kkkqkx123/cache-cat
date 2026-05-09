@@ -49,6 +49,7 @@ mod tests {
                 .call(
                     3,
                     GetReq {
+                        db_number: 0,
                         key: Vec::from("xxx"),
                     },
                 )

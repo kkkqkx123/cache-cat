@@ -49,7 +49,7 @@ impl Command for HGetCommand {
             .state_machine
             .data
             .kvs
-            .get_value_with_read_clock(&key);
+            .get_value_with_read_clock(&key, *db_number)?;
         drop(read_lock);
 
         match my_value {

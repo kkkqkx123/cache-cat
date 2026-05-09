@@ -1,5 +1,5 @@
 use crate::protocol::key::expire::ExpireCondition;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::{
     BaseOperation, DelReq, ExpireReq, InsertReq, PersistReq,
@@ -7,15 +7,19 @@ use crate::raft::types::entry::bae_operation::{
 use crate::raft::types::entry::request::AtomicRequest;
 
 impl MyCache {
-    pub fn persist(&self, persist: PersistReq, update: &mut UpdateType<'_>) -> Value {
-        let mut v = match self.cache.get(&persist.key) {
+    pub fn persist(&self, persist: PersistReq,update: &mut Update) -> Value {
+        let cache = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
+        let mut v = match cache.get(&persist.key) {
             Some(v) => v,
             None => return Value::Integer(0),
         };
         v.expires_at = 0;
-        match update {
+        match update.update_type {
             UpdateType::None => {
-                self.cache.insert(persist.key, v);
+                cache.insert(persist.key, v);
             }
             UpdateType::Snapshot(queue, write_clock) => {
                 let key = persist.key.clone();
@@ -26,20 +30,24 @@ impl MyCache {
                     write_clock: *write_clock,
                 });
 
-                self.cache.insert(key, v);
+                cache.insert(key, v);
             }
             UpdateType::CAS(cas_version) => {
                 if *cas_version - 1 == v.version {
                     v.version += 1;
-                    self.cache.insert(persist.key, v);
+                    cache.insert(persist.key, v);
                 }
             }
         }
         Value::Integer(1)
     }
 
-    pub fn expire(&self, expire_req: ExpireReq, update: &mut UpdateType<'_>) -> Value {
-        let mut v = match self.cache.get(&expire_req.key) {
+    pub fn expire(&self, expire_req: ExpireReq,update: &mut Update) -> Value {
+        let cache = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
+        let mut v = match cache.get(&expire_req.key) {
             Some(v) => v,
             None => return Value::Integer(0),
         };
@@ -57,9 +65,9 @@ impl MyCache {
         }
 
         v.expires_at = expire_req.expires_at;
-        match update {
+        match update.update_type {
             UpdateType::None => {
-                self.cache.insert(expire_req.key, v);
+                cache.insert(expire_req.key, v);
             }
             UpdateType::Snapshot(queue, write_clock) => {
                 let key = expire_req.key.clone();
@@ -70,29 +78,37 @@ impl MyCache {
                     write_clock: *write_clock,
                 });
 
-                self.cache.insert(key, v);
+                cache.insert(key, v);
             }
             UpdateType::CAS(cas_version) => {
                 if *cas_version - 1 == v.version {
                     v.version += 1;
-                    self.cache.insert(expire_req.key, v);
+                    cache.insert(expire_req.key, v);
                 }
             }
         }
         Value::Integer(1)
     }
 
-    pub fn del(&self, del_req: DelReq, update: &mut UpdateType<'_>) -> bool {
+    pub fn del(&self, del_req: DelReq, update: &mut Update) -> Value {
+        let cache = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
         //是否删除了元素
-        match update {
+        match update.update_type {
             UpdateType::None => {
-                let existed = self.cache.remove(&del_req.key);
-                existed.is_some()
+                let existed = cache.remove(&del_req.key);
+                if existed.is_some() {
+                    Value::Integer(1)
+                } else {
+                    Value::Integer(0)
+                }
             }
 
             UpdateType::Snapshot(queue, write_clock) => {
                 // 计算 version
-                let version = if let Some(entry) = self.cache.get(&del_req.key) {
+                let version = if let Some(entry) = cache.get(&del_req.key) {
                     entry.version + 1
                 } else {
                     1
@@ -103,34 +119,42 @@ impl MyCache {
                     write_clock: *write_clock,
                 });
 
-                let existed = self.cache.remove(&del_req.key);
-                existed.is_some()
+                let existed = cache.remove(&del_req.key);
+                if existed.is_some() {
+                    Value::Integer(1)
+                } else {
+                    Value::Integer(0)
+                }
             }
             UpdateType::CAS(cas_version) => {
-                if let Some(entry) = self.cache.get(&del_req.key) {
+                if let Some(entry) = cache.get(&del_req.key) {
                     if entry.version == *cas_version - 1 {
-                        self.cache.remove(&del_req.key);
-                        return true;
+                        cache.remove(&del_req.key);
+                        return Value::Integer(1);
                     }
                 }
-                false
+                Value::Integer(0)
             }
         }
     }
 
-    pub fn insert(&self, insert_req: InsertReq, update: &mut UpdateType<'_>) {
+    pub fn insert(&self, insert_req: InsertReq,update: &mut Update) -> Value {
+        let cache = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
         let mut value = MyValue {
             version: 1,
             expires_at: insert_req.expires_at,
             data: insert_req.value.clone(),
         };
-        match update {
+        match update.update_type {
             UpdateType::None => {
-                self.cache.insert(insert_req.key, value);
+                cache.insert(insert_req.key, value);
             }
             UpdateType::Snapshot(queue, write_clock) => {
                 let key = insert_req.key.clone();
-                self.cache.entry(key).and_upsert_with(|old_entry| {
+                cache.entry(key).and_upsert_with(|old_entry| {
                     value.version = if let Some(entry) = old_entry {
                         entry.into_value().version + 1
                     } else {
@@ -146,7 +170,7 @@ impl MyCache {
             }
             UpdateType::CAS(cas_version) => {
                 let key = insert_req.key.clone();
-                self.cache.entry(key).and_upsert_with(|maybe_entry| {
+                cache.entry(key).and_upsert_with(|maybe_entry| {
                     if let Some(entry) = maybe_entry {
                         let current_val = entry.value();
                         // 核心逻辑：只有传入的 version 与缓存中的 version 相同时才允许更新
@@ -169,5 +193,6 @@ impl MyCache {
                 });
             }
         }
+        Value::ok()
     }
 }

@@ -19,6 +19,7 @@ pub struct PrintTestRes {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct GetReq {
+    pub db_number: u16,
     pub key: Vec<u8>,
 }
 

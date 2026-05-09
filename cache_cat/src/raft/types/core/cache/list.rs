@@ -1,5 +1,5 @@
 use crate::raft::types::core::moka::cas::ComputeCommand;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, LPushReq};
@@ -12,7 +12,7 @@ impl ComputeCommand for LPushReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::LPush(self.clone())
     }
 
@@ -47,7 +47,7 @@ impl ComputeCommand for LPushReq {
 }
 
 impl MyCache {
-    pub fn l_push(&self, l_push: LPushReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn l_push(&self, l_push: LPushReq, update: &mut Update) -> Value {
         self.execute_compute(l_push, update)
     }
 }

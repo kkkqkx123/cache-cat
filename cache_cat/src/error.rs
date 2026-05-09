@@ -3,14 +3,14 @@
 //! This module provides a unified error type that hides internal complexity
 //! behind a simple, user-facing interface.
 
+use crate::error::ErrorKind::{Internal, InvalidConfig, Protocol, Retryable, Storage};
+use crate::raft::types::core::response_value::Value;
 use std::error::Error as StdError;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
 use std::result::Result as StdResult;
-use crate::error::ErrorKind::{Internal, InvalidConfig, Protocol, Retryable, Storage};
-use crate::raft::types::core::response_value::Value;
 
 /// Public error type for RockRaft operations
 ///
@@ -162,6 +162,10 @@ pub enum ProtocolError {
     /// Invalid RESP format
     #[error("invalid RESP format: {0}")]
     InvalidFormat(String),
+
+    /// Database does not exist or DB index is out of range
+    #[error("ERR DB index is out of range")]
+    DbNotExist,
 
     /// Unknown command
     #[error("unknown command '{0}'")]

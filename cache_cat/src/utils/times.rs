@@ -9,3 +9,8 @@ pub fn now_ms() -> u64 {
         .unwrap()
         .as_millis() as u64
 }
+
+// 相差多少秒
+pub fn time_gap(old_time: u64) -> u64 {
+    now_ms().saturating_sub(old_time) / 1000
+}

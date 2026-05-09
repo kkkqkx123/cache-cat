@@ -70,7 +70,7 @@ impl Command for ExistsCommand {
                 .state_machine
                 .data
                 .kvs
-                .get_value_with_read_clock(key)
+                .get_value_with_read_clock(key, *db_number)?
                 .is_some()
             {
                 counter += 1;

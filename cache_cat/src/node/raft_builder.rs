@@ -7,6 +7,7 @@ use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::request::Request;
 use crate::raft::types::raft_types::TypeConfig;
 use crate::utils::now_ms;
+use crate::utils::times::time_gap;
 use openraft::error::{ClientWriteError, RaftError};
 use openraft::raft::ClientWriteResponse;
 use std::sync::Arc;
@@ -31,7 +32,9 @@ impl RaftNodeBuilder {
             let mut interval = time::interval(Duration::from_secs(duration));
             loop {
                 interval.tick().await;
-                back.app.state_machine.data.kvs.cache.run_pending_tasks();
+                for cache in &back.app.state_machine.data.kvs.cache {
+                    cache.run_pending_tasks()
+                }
                 let write_clock = back.app.state_machine.data.kvs.get_write_clock();
                 let have_deleted = back
                     .app
@@ -42,11 +45,11 @@ impl RaftNodeBuilder {
                     .load(Ordering::Acquire);
 
                 //超过阈值没有任何的写操作 并且这期间存在数据被删除过。那么就提交一条空日志给从节点推动时钟前进
-                if (now_ms() - write_clock) / 1000 > duration && have_deleted {
+                if time_gap(write_clock) > duration && have_deleted {
                     let result = back
                         .app
                         .raft
-                        .client_write(Request::Base(0, BaseOperation::None))
+                        .client_write(Request::Base(0, BaseOperation::Empty))
                         .await;
                     match result {
                         Err(err) => {

@@ -107,7 +107,12 @@ impl Command for ZRangeCommand {
             .await
             .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
         let read_lock = server.app.state_machine.data.kvs.read_lock.lock().await;
-        let my_value = server.app.state_machine.data.kvs.cache.get(&params.key);
+        let my_value = server
+            .app
+            .state_machine
+            .data
+            .kvs
+            .get_value_with_read_clock(&params.key, *db_number)?;
         drop(read_lock);
         match my_value {
             None => Ok(Value::BulkString(None)),

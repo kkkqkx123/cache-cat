@@ -45,6 +45,10 @@ pub struct CacheCatApp {
     pub path: PathBuf,
 }
 
+impl CacheCatApp {
+    
+}
+
 
 
 pub type Entry = openraft::Entry<TypeConfig>;

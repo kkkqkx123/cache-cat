@@ -7,7 +7,7 @@ use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::store::snapshot::snapshot_handler::{
     dump_cache_to_path, get_snapshot_file_name, load_cache_from_path,
 };
-use crate::raft::types::core::moka::moka::{MyCache, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, InsertReq, SetReq};
@@ -119,7 +119,7 @@ impl StateMachineStore {
         node_id: NodeId,
     ) -> Result<StateMachineStore, io::Error> {
         let (tx, _) = broadcast::channel::<()>(2);
-        let cache = MyCache::new();
+        let cache = MyCache::new(config.db_number);
         let mut sm = Self {
             data: StateMachineData {
                 snapshot_message: tx,
@@ -179,18 +179,24 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
         } else {
             &mut UpdateType::None
         };
+        let mut update = Update {
+            db_number: 0,
+            update_type,
+        };
         while let Some((entry, responder)) = entries.try_next().await? {
             raft_meta.last_applied_log_id = Some(entry.log_id);
             let st = &self.data.kvs;
             let response = match entry.payload {
                 EntryPayload::Blank => {
-                    st.cache.run_pending_tasks();
+                    for cache in &st.cache {
+                        cache.run_pending_tasks()
+                    }
                     Value::ok()
                 }
                 EntryPayload::Normal(req) => match req {
                     Request::Base(time, base) => {
                         let write_clock = st.set_write_clock(time);
-                        match update_type {
+                        match update.update_type {
                             UpdateType::Snapshot(_, count) => {
                                 // 直接修改 count（因为匹配到的 count 是可变的）
                                 *count = write_clock;
@@ -198,47 +204,38 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                             _ => {}
                         }
                         match base {
-                            BaseOperation::None => Value::ok(),
+                            BaseOperation::Empty => Value::ok(),
                             BaseOperation::Set(set) => {
-                                st.set(set, update_type);
+                                st.set(set, &mut update);
                                 Value::ok()
                             }
-                            BaseOperation::Expire(expire) => st.expire(expire, update_type),
-                            BaseOperation::LPush(l_push) => st.l_push(l_push, update_type),
-                            BaseOperation::Del(del) => {
-                                if st.del(del, update_type) {
-                                    Value::Integer(1)
-                                } else {
-                                    Value::Integer(0)
-                                }
-                            }
-                            BaseOperation::Incr(incr) => st.incr(incr, update_type),
-                            BaseOperation::Append(append) => st.append(append, update_type),
-                            BaseOperation::HSet(h_set) => st.h_set(h_set, update_type),
-                            BaseOperation::HIncr(h_get) => st.h_incr(h_get, update_type),
-                            BaseOperation::ZAdd(z_add) => st.z_add(z_add, update_type),
-                            BaseOperation::SAdd(s_add) => st.s_add(s_add, update_type),
-                            BaseOperation::Persist(persist) => st.persist(persist, update_type),
-                            BaseOperation::Insert(insert) => {
-                                st.insert(insert, update_type);
-                                Value::ok()
-                            }
+                            BaseOperation::Expire(expire) => st.expire(expire, &mut update),
+                            BaseOperation::LPush(l_push) => st.l_push(l_push, &mut update),
+                            BaseOperation::Del(del) => st.del(del, &mut update),
+                            BaseOperation::Incr(incr) => st.incr(incr, &mut update),
+                            BaseOperation::Append(append) => st.append(append, &mut update),
+                            BaseOperation::HSet(h_set) => st.h_set(h_set, &mut update),
+                            BaseOperation::HIncr(h_get) => st.h_incr(h_get, &mut update),
+                            BaseOperation::ZAdd(z_add) => st.z_add(z_add, &mut update),
+                            BaseOperation::SAdd(s_add) => st.s_add(s_add, &mut update),
+                            BaseOperation::Persist(persist) => st.persist(persist, &mut update),
+                            BaseOperation::Insert(insert) => st.insert(insert, &mut update),
                         }
                     }
                     Request::Redis(time, redis) => {
                         let write_clock = st.set_write_clock(time);
                         match redis {
                             RedisOperation::RedisDel(del) => {
-                                redis_del_hand(st, del, update_type).await
+                                redis_del_hand(st, del, &mut update).await
                             }
                             RedisOperation::RedisSet(set) => {
-                                redis_set_hand(st, set, update_type, write_clock).await
+                                redis_set_hand(st, set, &mut update, write_clock).await
                             }
                             RedisOperation::RedisMset(mset) => {
-                                redis_mset_hand(st, mset, update_type).await
+                                redis_mset_hand(st, mset, &mut update).await
                             }
                             RedisOperation::RedisRename(rename) => {
-                                redis_rename_hand(st, rename, update_type).await
+                                redis_rename_hand(st, rename, &mut update).await
                             }
                         }
                     }
@@ -279,43 +276,47 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             .ok_or(io::Error::new(io::ErrorKind::Other, "meta data is empty"))?;
         for atomic_request in res.1 {
             let update_type = &mut UpdateType::CAS(atomic_request.version);
+            let mut update = Update {
+                db_number: 0,
+                update_type,
+            };
             match atomic_request.request {
-                BaseOperation::None => {}
+                BaseOperation::Empty => {}
                 BaseOperation::Set(set) => {
-                    self.data.kvs.set(set, update_type);
+                    self.data.kvs.set(set, &mut update);
                 }
                 BaseOperation::Expire(expire_req) => {
-                    self.data.kvs.expire(expire_req, update_type);
+                    self.data.kvs.expire(expire_req, &mut update);
                 }
                 BaseOperation::LPush(l_push) => {
-                    self.data.kvs.l_push(l_push, update_type);
+                    self.data.kvs.l_push(l_push, &mut update);
                 }
                 BaseOperation::Del(del) => {
-                    self.data.kvs.del(del, update_type);
+                    self.data.kvs.del(del, &mut update);
                 }
                 BaseOperation::Incr(incr) => {
-                    self.data.kvs.incr(incr, update_type);
+                    self.data.kvs.incr(incr, &mut update);
                 }
                 BaseOperation::Append(append) => {
-                    self.data.kvs.append(append, update_type);
+                    self.data.kvs.append(append, &mut update);
                 }
                 BaseOperation::HSet(hset) => {
-                    self.data.kvs.h_set(hset, update_type);
+                    self.data.kvs.h_set(hset, &mut update);
                 }
                 BaseOperation::HIncr(h_incr) => {
-                    self.data.kvs.h_incr(h_incr, update_type);
+                    self.data.kvs.h_incr(h_incr, &mut update);
                 }
                 BaseOperation::ZAdd(zadd) => {
-                    self.data.kvs.z_add(zadd, update_type);
+                    self.data.kvs.z_add(zadd, &mut update);
                 }
                 BaseOperation::SAdd(sadd) => {
-                    self.data.kvs.s_add(sadd, update_type);
+                    self.data.kvs.s_add(sadd, &mut update);
                 }
                 BaseOperation::Persist(persist) => {
-                    self.data.kvs.persist(persist, update_type);
+                    self.data.kvs.persist(persist, &mut update);
                 }
                 BaseOperation::Insert(insert) => {
-                    self.data.kvs.insert(insert, update_type);
+                    self.data.kvs.insert(insert, &mut update);
                 }
             }
         }
@@ -344,32 +345,35 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
 pub async fn redis_rename_hand(
     cache: &MyCache,
     params: RenameParams,
-    update_type: &mut UpdateType<'_>,
+    update: &mut Update<'_, '_>,
 ) -> Value {
     let _exclusive_lock = cache.read_lock.lock().await;
-
-    let my_value = match cache.cache.get(&params.key) {
+    let cached = match cache.get_cache(update.db_number) {
+        Err(err) => return err,
+        Ok(cache) => cache,
+    };
+    let my_value = match cached.get(&params.key) {
         None => return Value::Error("no such key".to_string()),
         Some(value) => value,
     };
     let del = DelReq {
         key: Arc::from(params.key),
     };
-    cache.del(del, update_type);
+    cache.del(del, update);
     let new_key: Arc<Vec<u8>> = Arc::from(params.new_key);
     let insert = InsertReq {
         key: new_key.clone(),
         value: my_value.data,
         expires_at: my_value.expires_at,
     };
-    cache.insert(insert, update_type);
+    cache.insert(insert, update);
     Value::ok()
 }
 
 pub async fn redis_del_hand(
     cache: &MyCache,
     params: DelParams,
-    update_type: &mut UpdateType<'_>,
+    update: &mut Update<'_, '_>,
 ) -> Value {
     let mut count = 0;
     let _exclusive_lock = cache.read_lock.lock().await;
@@ -377,8 +381,10 @@ pub async fn redis_del_hand(
         let del = DelReq {
             key: Arc::from(key),
         };
-        if cache.del(del, update_type) {
-            count = count + 1;
+        match cache.del(del, update) {
+            Value::Error(err) => return Value::Error(err),
+            Value::Integer(num) => count = count + num,
+            _ => {}
         }
     }
     Value::Integer(count)
@@ -387,7 +393,7 @@ pub async fn redis_del_hand(
 pub async fn redis_mset_hand(
     cache: &MyCache,
     params: MsetParams,
-    update_type: &mut UpdateType<'_>,
+    update: &mut Update<'_, '_>,
 ) -> Value {
     let _exclusive_lock = cache.read_lock.lock().await;
     for pair in params.pairs {
@@ -396,7 +402,7 @@ pub async fn redis_mset_hand(
             value: Arc::from(pair.1),
             ex_time: 0,
         };
-        cache.set(set, update_type);
+        cache.set(set, update);
     }
     Value::ok()
 }
@@ -404,7 +410,7 @@ pub async fn redis_mset_hand(
 pub async fn redis_set_hand(
     cache: &MyCache,
     params: SetParams,
-    update_type: &mut UpdateType<'_>,
+    update: &mut Update<'_, '_>,
     time: u64,
 ) -> Value {
     // 最新的写逻辑时间
@@ -420,8 +426,13 @@ pub async fn redis_set_hand(
     // Calculate expiration timestamp in milliseconds (0 means no expiration)
     let expires_at = match params.expiration {
         Some(Expiration::KeepTTL) => {
+            let cache = match cache.get_cache(update.db_number) {
+                Err(err) => return err,
+                Ok(cache) => cache,
+            };
+
             // Read existing value to get its expiration time
-            match cache.cache.get(&params.key) {
+            match cache.get(&params.key) {
                 None => NO_EXPIRATION,
                 Some(value) => {
                     let ttl_ms = value.expires_at;
@@ -486,7 +497,7 @@ pub async fn redis_set_hand(
         value: Arc::from(params.value),
         ex_time: expires_at,
     };
-    cache.set(set, update_type);
+    cache.set(set, update);
     if params.get {
         // Store the old value for GET option before we overwrite
         match existing_key {

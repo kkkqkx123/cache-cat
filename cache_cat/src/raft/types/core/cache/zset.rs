@@ -1,5 +1,5 @@
 use crate::raft::types::core::moka::cas::ComputeCommand;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject::ZSet;
 use crate::raft::types::core::value_object::{SortedSet, ValueObject};
@@ -12,7 +12,7 @@ impl ComputeCommand for ZAddReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::ZAdd(self.clone())
     }
 
@@ -37,7 +37,7 @@ impl ComputeCommand for ZAddReq {
 }
 
 impl MyCache {
-    pub fn z_add(&self, zadd: ZAddReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn z_add(&self, zadd: ZAddReq, update: &mut Update) -> Value {
         self.execute_compute(zadd, update)
     }
 }

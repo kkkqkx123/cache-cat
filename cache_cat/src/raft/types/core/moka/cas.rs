@@ -1,8 +1,9 @@
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::response_value::Value::Integer;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::BaseOperation;
+use crate::raft::types::entry::bae_operation::BaseOperation::Empty;
 use crate::raft::types::entry::request::AtomicRequest;
 use moka::ops::compute::{CompResult, Op};
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 pub trait ComputeCommand: Send + 'static {
     fn key(&self) -> Arc<Vec<u8>>;
 
-    fn into_base_op(&self) -> BaseOperation;
+    fn into_base_op(self) -> BaseOperation;
 
     /// 返回: (是否修改, 返回值)
     fn mutate(self, value: &mut MyValue) -> (bool, Value);
@@ -20,15 +21,19 @@ pub trait ComputeCommand: Send + 'static {
 }
 
 impl MyCache {
-    pub fn execute_compute<C>(&self, cmd: C, update: &mut UpdateType<'_>) -> Value
+    pub fn execute_compute<C>(&self, cmd: C, update: &mut Update) -> Value
     where
         C: ComputeCommand + Clone,
     {
+        let cache = match self.cache.get(update.db_number as usize) {
+            None => return Value::error("Key not found"),
+            Some(v) => v,
+        };
         let key = cmd.key();
         let mut return_value = Integer(0);
 
-        let result = match update {
-            UpdateType::None => self.cache.entry(key).and_compute_with(|maybe_entry| {
+        let result = match update.update_type {
+            UpdateType::None => cache.entry(key).and_compute_with(|maybe_entry| {
                 let cmd = cmd.clone();
                 match maybe_entry {
                     Some(entry) => {
@@ -57,7 +62,7 @@ impl MyCache {
             }),
 
             UpdateType::Snapshot(queue, write_clock) => {
-                self.cache.entry(key).and_compute_with(|maybe_entry| {
+                cache.entry(key).and_compute_with(|maybe_entry| {
                     let cmd_copy = cmd.clone();
                     let mut next_version = 1;
 
@@ -97,7 +102,7 @@ impl MyCache {
             UpdateType::CAS(cas_version) => {
                 let expected_version = *cas_version - 1;
 
-                self.cache.entry(key).and_compute_with(|maybe_entry| {
+                cache.entry(key).and_compute_with(|maybe_entry| {
                     let cmd = cmd.clone();
                     match maybe_entry {
                         Some(entry) => {

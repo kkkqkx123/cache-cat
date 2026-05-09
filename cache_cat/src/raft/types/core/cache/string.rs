@@ -1,17 +1,19 @@
 use crate::raft::types::core::moka::cas::ComputeCommand;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{AppendReq, BaseOperation, IncrReq, SetReq};
 use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::parse_i64;
+use moka::sync::Cache;
 use std::sync::Arc;
+
 impl ComputeCommand for IncrReq {
     fn key(&self) -> Arc<Vec<u8>> {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::Incr(self.clone())
     }
 
@@ -50,7 +52,7 @@ impl ComputeCommand for AppendReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::Append(self.clone())
     }
 
@@ -78,7 +80,11 @@ impl ComputeCommand for AppendReq {
 }
 
 impl MyCache {
-    pub fn set(&self, set_req: SetReq, update: &mut UpdateType<'_>) {
+    pub fn set(&self, set_req: SetReq, update: &mut Update) -> Value {
+        let cache = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
         let mut value = match parse_i64(&set_req.value) {
             None => MyValue {
                 data: ValueObject::String(set_req.value.clone()),
@@ -91,13 +97,14 @@ impl MyCache {
                 version: 1,
             },
         };
-        match update {
+        match update.update_type {
             UpdateType::None => {
-                self.cache.insert(set_req.key, value);
+                cache.insert(set_req.key, value);
+                Value::ok()
             }
             UpdateType::Snapshot(queue, write_clock) => {
                 let key = set_req.key.clone();
-                self.cache.entry(key).and_upsert_with(|old_entry| {
+                cache.entry(key).and_upsert_with(|old_entry| {
                     value.version = if let Some(entry) = old_entry {
                         entry.into_value().version + 1
                     } else {
@@ -110,10 +117,11 @@ impl MyCache {
                     });
                     value
                 });
+                Value::ok()
             }
             UpdateType::CAS(cas_version) => {
                 let key = set_req.key.clone();
-                self.cache.entry(key).and_upsert_with(|maybe_entry| {
+                cache.entry(key).and_upsert_with(|maybe_entry| {
                     if let Some(entry) = maybe_entry {
                         let current_val = entry.value();
                         // 核心逻辑：只有传入的 version 与缓存中的 version 相同时才允许更新
@@ -134,15 +142,16 @@ impl MyCache {
                         }
                     }
                 });
+                Value::ok()
             }
         }
     }
 
-    pub fn incr(&self, incr_req: IncrReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn incr(&self, incr_req: IncrReq,update: &mut Update) -> Value {
         self.execute_compute(incr_req, update)
     }
     //如果不是string就报错，如果是string就append，如果没有值就创建一个
-    pub fn append(&self, incr_req: AppendReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn append(&self, incr_req: AppendReq, update: &mut Update) -> Value {
         self.execute_compute(incr_req, update)
     }
 }

@@ -49,7 +49,7 @@ impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Request::Base(.., op) => match op {
-                BaseOperation::None => write!(f, "None"),
+                BaseOperation::Empty => write!(f, "None"),
                 BaseOperation::Set(req) => write!(f, "Set: {}", req),
                 BaseOperation::LPush(req) => write!(f, "LPush: {}", req),
                 BaseOperation::Del(req) => write!(f, "DEL: {}", req),

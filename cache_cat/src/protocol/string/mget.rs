@@ -34,13 +34,17 @@ impl MgetParams {
 
 /// Get a value from the server
 /// Returns None if key not found or expired.
-async fn get_value(server: &RedisServer, key: &Vec<u8>) -> CacheCatResult<Option<Vec<u8>>> {
+async fn get_value(
+    server: &RedisServer,
+    key: &Vec<u8>,
+    db_number: u16,
+) -> CacheCatResult<Option<Vec<u8>>> {
     let value = server
         .app
         .state_machine
         .data
         .kvs
-        .get_value_with_read_clock(key);
+        .get_value_with_read_clock(key, db_number)?;
     match value {
         None => Ok(None),
         Some(v) => match v.data {
@@ -59,7 +63,12 @@ pub struct MgetCommand;
 
 #[async_trait]
 impl Command for MgetCommand {
-    async fn execute(&self,db_number: &mut u16, items: &[Value], server: &RedisServer) -> Result<Value, CacheCatError> {
+    async fn execute(
+        &self,
+        db_number: &mut u16,
+        items: &[Value],
+        server: &RedisServer,
+    ) -> Result<Value, CacheCatError> {
         let params = MgetParams::parse(items)?;
         let raft = &server.app.raft;
         let linearizer = raft
@@ -74,7 +83,7 @@ impl Command for MgetCommand {
         let _shard_lock = server.app.state_machine.data.kvs.write_lock.lock();
         let _exclusive_lock = server.app.state_machine.data.kvs.read_lock.lock();
         for key in &params.keys {
-            let value = get_value(server, key).await;
+            let value = get_value(server, key, *db_number).await;
             match value {
                 Ok(Some(value)) => {
                     results.push(Value::BulkString(Some(value)));

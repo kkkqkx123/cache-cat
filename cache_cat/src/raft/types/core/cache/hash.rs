@@ -1,5 +1,5 @@
 use crate::raft::types::core::moka::cas::ComputeCommand;
-use crate::raft::types::core::moka::moka::{MyCache, MyValue, UpdateType};
+use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::{HashValue, ValueObject};
 use crate::raft::types::entry::bae_operation::{BaseOperation, HIncrReq, HSetReq};
@@ -13,7 +13,7 @@ impl ComputeCommand for HSetReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::HSet(self.clone())
     }
 
@@ -65,7 +65,7 @@ impl ComputeCommand for HIncrReq {
         self.key.clone()
     }
 
-    fn into_base_op(&self) -> BaseOperation {
+    fn into_base_op(self) -> BaseOperation {
         BaseOperation::HIncr(self.clone())
     }
 
@@ -110,10 +110,10 @@ impl ComputeCommand for HIncrReq {
 }
 
 impl MyCache {
-    pub fn h_set(&self, hset: HSetReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn h_set(&self, hset: HSetReq,update: &mut Update) -> Value {
         self.execute_compute(hset, update)
     }
-    pub fn h_incr(&self, h_incr: HIncrReq, update: &mut UpdateType<'_>) -> Value {
+    pub fn h_incr(&self, h_incr: HIncrReq, update: &mut Update) -> Value {
         self.execute_compute(h_incr, update)
     }
 }

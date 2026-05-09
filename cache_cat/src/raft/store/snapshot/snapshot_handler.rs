@@ -108,7 +108,7 @@ where
     P: AsRef<Path>,
 {
     //先将缓存清空
-    cache.cache.invalidate_all();
+    cache.invalidate_all();
     let path = path.as_ref();
     let f = match File::open(path).await {
         Ok(f) => f,
@@ -199,7 +199,7 @@ async fn test_dump_and_load_with_data() {
     pub const TEMP_PATH: &str = r"E:\tmp\raft\raft-engine";
     use crate::raft::types::core::moka::moka::MyValue;
     use crate::raft::types::core::value_object::ValueObject;
-    let cache = MyCache::new();
+    let cache = MyCache::new(1);
 
     // 插入测试数据
     let key1 = Arc::new(b"key1".to_vec());
@@ -216,8 +216,8 @@ async fn test_dump_and_load_with_data() {
         expires_at: 0, // 永不过期
     };
 
-    cache.cache.insert(key1.clone(), value1.clone());
-    cache.cache.insert(key2.clone(), value2.clone());
+    cache.cache[0].insert(key1.clone(), value1.clone());
+    cache.cache[0].insert(key2.clone(), value2.clone());
     // let req = SetReq {
     //     key: Vec::from("xxx").into(),
     //     value: Vec::from("xxx").into(),
@@ -242,7 +242,7 @@ async fn test_dump_and_load_with_data() {
     .expect("dump cache should succeed");
 
     // 创建新缓存并加载数据
-    let new_cache = MyCache::new();
+    let new_cache = MyCache::new(1);
     match load_cache_from_path(
         new_cache.clone(),
         path.join("snapshot").join(get_snapshot_file_name()),
@@ -257,8 +257,8 @@ async fn test_dump_and_load_with_data() {
     }
 
     // 验证数据完整性
-    let loaded_value1 = new_cache.cache.get(&key1);
-    let loaded_value2 = new_cache.cache.get(&key2);
+    let loaded_value1 = new_cache.cache[0].get(&key1);
+    let loaded_value2 = new_cache.cache[0].get(&key2);
 
     assert!(loaded_value1.is_some(), "key1 should exist");
     assert!(loaded_value2.is_some(), "key2 should exist");
