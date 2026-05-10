@@ -41,3 +41,4 @@ r = redis.Redis(
 )
 r.set('test12', 'test')
 print(r.get('test12'))
+print(r.echo('test13'))
