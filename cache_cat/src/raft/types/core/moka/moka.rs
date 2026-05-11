@@ -13,7 +13,7 @@ use std::option::Option;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MyValue {
@@ -89,7 +89,7 @@ pub struct MyCache {
     pub databases: Vec<Database>,
     // 这俩把锁是为了保证每条指令的原子性 多key写，多key读需要同时获取俩把锁 同时获取俩把锁时 先加write_lock
     pub write_lock: Arc<Mutex<()>>, //单key写
-    pub read_lock: Arc<Mutex<()>>,  //单key读
+    pub read_lock: Arc<RwLock<()>>, //单key读
 
     read_logic_clock: Arc<AtomicU64>,  //读逻辑时钟
     write_logic_clock: Arc<AtomicU64>, //写逻辑时钟

@@ -343,7 +343,7 @@ pub async fn redis_rename_hand(
     params: RenameParams,
     update: &mut Update<'_, '_>,
 ) -> Value {
-    let _exclusive_lock = cache.read_lock.lock().await;
+    let _exclusive_lock = cache.read_lock.write().await;
     let cached = match cache.get_cache(update.db_number) {
         Err(err) => return err,
         Ok(cache) => cache,
@@ -372,7 +372,7 @@ pub async fn redis_del_hand(
     update: &mut Update<'_, '_>,
 ) -> Value {
     let mut count = 0;
-    let _exclusive_lock = cache.read_lock.lock().await;
+    let _exclusive_lock = cache.read_lock.write().await;
     for key in params.keys {
         let del = DelReq {
             key: Arc::from(key),
@@ -391,7 +391,7 @@ pub async fn redis_mset_hand(
     params: MsetParams,
     update: &mut Update<'_, '_>,
 ) -> Value {
-    let _exclusive_lock = cache.read_lock.lock().await;
+    let _exclusive_lock = cache.read_lock.write().await;
     for pair in params.pairs {
         let set = SetReq {
             key: Arc::from(pair.0),
