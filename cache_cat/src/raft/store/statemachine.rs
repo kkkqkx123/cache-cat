@@ -188,8 +188,8 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
             let st = &self.data.kvs;
             let response = match entry.payload {
                 EntryPayload::Blank => {
-                    for cache in &st.cache {
-                        cache.run_pending_tasks()
+                    for db in &st.databases {
+                        db.cache.run_pending_tasks()
                     }
                     Value::ok()
                 }
@@ -207,10 +207,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     match req {
                         Request::Base(_, base) => match base {
                             BaseOperation::Empty => Value::ok(),
-                            BaseOperation::Set(set) => {
-                                st.set(set, &mut update);
-                                Value::ok()
-                            }
+                            BaseOperation::Set(set) => st.set(set, &mut update),
                             BaseOperation::Expire(expire) => st.expire(expire, &mut update),
                             BaseOperation::LPush(l_push) => st.l_push(l_push, &mut update),
                             BaseOperation::Del(del) => st.del(del, &mut update),
