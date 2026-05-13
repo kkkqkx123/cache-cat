@@ -25,7 +25,6 @@ use crate::protocol::string::set::SetCommand;
 use crate::protocol::zset::zadd::ZAddCommand;
 use crate::protocol::zset::zrange::ZRangeCommand;
 use crate::raft::network::redis_server::RedisServer;
-use crate::raft::types::core::moka::moka::Database;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;

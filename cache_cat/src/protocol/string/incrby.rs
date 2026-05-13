@@ -4,12 +4,10 @@ use crate::raft::network::redis_server::RedisServer;
 use std::sync::Arc;
 
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::BaseOperation::{HIncr, Incr};
-use crate::raft::types::entry::bae_operation::{HIncrReq, IncrReq};
+use crate::raft::types::entry::bae_operation::BaseOperation::Incr;
+use crate::raft::types::entry::bae_operation::IncrReq;
 use async_trait::async_trait;
-use crate::protocol::hash::hincrby::HIncrByCommand;
 use crate::protocol::raft_command::RaftCommand;
-use crate::protocol::string::incr::{IncrCommand, IncrParams};
 use crate::raft::types::entry::request::Operation;
 
 /// Parameters for INCR command

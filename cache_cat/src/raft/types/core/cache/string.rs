@@ -1,10 +1,9 @@
-use crate::error::{CacheCatError, ProtocolError};
+use crate::error::ProtocolError;
 use crate::protocol::string::get::GetParams;
 use crate::protocol::string::mget::MgetParams;
 use crate::raft::types::core::moka::cas::ComputeCommand;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::core::response_value::Value::Error;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{AppendReq, BaseOperation, IncrReq, SetReq};
 use crate::raft::types::entry::request::AtomicRequest;

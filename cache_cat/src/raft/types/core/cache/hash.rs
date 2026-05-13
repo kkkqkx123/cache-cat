@@ -1,4 +1,4 @@
-use crate::error::{CacheCatError, ProtocolError};
+use crate::error::ProtocolError;
 use crate::protocol::hash::hget::HGetParams;
 use crate::raft::types::core::moka::cas::ComputeCommand;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update};
@@ -124,11 +124,11 @@ impl MyCache {
                     let guard = map.lock();
                     let option = guard.get(&param.field);
                     match option {
-                        None => (Value::BulkString(None)),
+                        None => Value::BulkString(None) ,
                         Some(value) => match value {
-                            HashValue::Str(str) => (Value::BulkString(Some(str.as_ref().clone()))),
+                            HashValue::Str(str) => Value::BulkString(Some(str.as_ref().clone())) ,
                             HashValue::Int(int) => {
-                                (Value::BulkString(Some(int.to_string().as_bytes().to_vec())))
+                                Value::BulkString(Some(int.to_string().as_bytes().to_vec())) 
                             }
                         },
                     }

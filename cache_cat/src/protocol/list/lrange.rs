@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use crate::protocol::raft_command::RaftCommand;
-use crate::protocol::string::get::{GetCommand, GetParams};
 use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::Operation;
 

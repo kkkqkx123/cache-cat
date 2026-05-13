@@ -5,7 +5,6 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::{
     BaseOperation, DelReq, ExpireReq, InsertReq, PersistReq,
 };
-use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::AtomicRequest;
 
 impl MyCache {

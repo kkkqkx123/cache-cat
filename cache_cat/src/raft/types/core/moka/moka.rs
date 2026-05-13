@@ -1,5 +1,4 @@
 use crate::error::ProtocolError;
-use crate::protocol::command::Client;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::request::AtomicRequest;

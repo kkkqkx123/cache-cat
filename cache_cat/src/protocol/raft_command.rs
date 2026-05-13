@@ -1,9 +1,4 @@
 use crate::error::ProtocolError;
-use crate::protocol::connection::bgsave::BgsaveCommand;
-use crate::protocol::connection::echo::EchoCommand;
-use crate::protocol::connection::ping::PingCommand;
-use crate::protocol::connection::save::SaveCommand;
-use crate::protocol::connection::select::SelectCommand;
 use crate::protocol::hash::hget::HGetCommand;
 use crate::protocol::hash::hincrby::HIncrByCommand;
 use crate::protocol::hash::hset::HSetCommand;

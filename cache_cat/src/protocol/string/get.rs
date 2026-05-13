@@ -1,18 +1,14 @@
 use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
-use crate::protocol::hash::hincrby::HIncrByCommand;
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::BaseOperation::HIncr;
-use crate::raft::types::entry::bae_operation::HIncrReq;
 use crate::raft::types::entry::read_operation::ReadOperation;
-use crate::raft::types::entry::request::{Operation, Request};
+use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::sync::Arc;
 
 /// Parameters for GET command
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
