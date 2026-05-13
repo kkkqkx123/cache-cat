@@ -5,6 +5,7 @@ use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::now_ms;
 use moka::Expiry;
 use moka::sync::Cache;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::collections::HashMap;
@@ -12,8 +13,7 @@ use std::option::Option;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
-use tokio::sync::{Mutex};
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MyValue {
@@ -69,14 +69,11 @@ impl Expiry<Arc<Vec<u8>>, MyValue> for MyExpiry {
 #[derive(Debug)]
 pub struct Database {
     pub cache: Cache<Arc<Vec<u8>>, MyValue>,
-    pub watched_keys: HashMap<Arc<Vec<u8>>, ()>,
 }
 impl Clone for Database {
     fn clone(&self) -> Self {
         Self {
             cache: self.cache.clone(),
-            // clone 时忽略 watched_keys
-            watched_keys: HashMap::new(),
         }
     }
 }
@@ -151,10 +148,7 @@ impl MyCache {
                     deleted.store(true, Ordering::Release)
                 })
                 .build();
-            let db = Database {
-                cache,
-                watched_keys: HashMap::new(),
-            };
+            let db = Database { cache };
             vec.push(db);
         }
         Self {
@@ -200,10 +194,10 @@ impl MyCache {
     }
 }
 
-pub struct Update<'a, 'b> {
+pub struct Update<'a> {
     pub db_number: u16,
     pub write_clock: u64,
-    pub update_type: &'b mut UpdateType<'a>,
+    pub update_type: &'a mut UpdateType<'a>,
 }
 pub enum UpdateType<'a> {
     None,

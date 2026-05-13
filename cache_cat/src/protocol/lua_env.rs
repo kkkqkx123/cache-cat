@@ -1,10 +1,13 @@
 use crate::protocol::raft_command::RaftCommandFactory;
+use crate::raft::types::core::moka::moka::{Database, Update};
 use crate::raft::types::core::response_value::Value as RaftValue;
 use mlua::prelude::LuaError;
 use mlua::{Lua, Value, Variadic};
+use crate::raft::store::statemachine::StateMachineStore;
 
 struct LuaEnv {
     lua: Lua,
+    sm: StateMachineStore
 }
 
 struct RedisHandler {
@@ -28,15 +31,15 @@ impl RedisHandler {
         for param in args {
             vec.push(RaftValue::SimpleString(param));
         }
-        let x = self.raft_command.parse_request(&vec);
+        let operation = self.raft_command.parse_request(&vec).unwrap();
+
         todo!()
     }
 }
 
 impl LuaEnv {
-    fn new() -> mlua::Result<LuaEnv> {
+    fn new(sm: StateMachineStore) -> mlua::Result<LuaEnv> {
         let lua = Lua::new();
-
         // 沙箱设置
         let globals = lua.globals();
         globals.set("os", Value::Nil)?;
@@ -58,10 +61,10 @@ impl LuaEnv {
 
         globals.set("redis", redis_api)?;
 
-        Ok(LuaEnv { lua })
+        Ok(LuaEnv { lua, sm })
     }
 
-    fn exec_lua(&self, cmd: &str) -> mlua::Result<Value> {
+    fn exec_lua(&self, cmd: &str, update: Update) -> mlua::Result<Value> {
         let result: Value = self.lua.load(cmd).eval()?;
         Ok(result)
     }

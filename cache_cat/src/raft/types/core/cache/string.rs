@@ -2,6 +2,7 @@ use crate::error::ProtocolError;
 use crate::protocol::NO_EXPIRATION;
 use crate::protocol::string::get::GetParams;
 use crate::protocol::string::mget::MgetParams;
+use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::types::core::moka::cas::ComputeCommand;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
@@ -11,7 +12,6 @@ use crate::raft::types::entry::bae_operation::{AppendReq, BaseOperation, IncrReq
 use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::parse_i64;
 use std::sync::Arc;
-use crate::protocol::string::mset::MsetParams;
 
 impl ComputeCommand for IncrReq {
     fn key(&self) -> Arc<Vec<u8>> {
@@ -85,8 +85,7 @@ impl ComputeCommand for AppendReq {
 }
 
 impl MyCache {
-
-    pub fn redis_mset(&self, params: MsetParams, update: &mut Update<'_, '_>) -> Value {
+    pub fn redis_mset(&self, params: MsetParams, update: &mut Update<'_>) -> Value {
         let _exclusive_lock = self.read_lock.write();
         for pair in params.pairs {
             let set = SetReq {
@@ -99,7 +98,7 @@ impl MyCache {
         Value::ok()
     }
 
-    pub fn redis_set(&self, params: SetParams, update: &mut Update<'_, '_>) -> Value {
+    pub fn redis_set(&self, params: SetParams, update: &mut Update<'_>) -> Value {
         // 最新的写逻辑时间
         let now = update.write_clock;
 

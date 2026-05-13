@@ -1,5 +1,6 @@
 use crate::protocol::key::del::DelParams;
 use crate::protocol::key::rename::RenameParams;
+use crate::protocol::lua::eval::EvalParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::SetParams;
 use crate::raft::types::entry::bae_operation::BaseOperation;
@@ -55,6 +56,7 @@ pub enum RedisOperation {
     RedisMset(MsetParams),
     RedisDel(DelParams),
     RedisRename(RenameParams),
+    RedisEval(EvalParams),
 }
 
 impl fmt::Display for Request {
@@ -88,6 +90,7 @@ impl fmt::Display for Request {
                 RedisOperation::RedisMset(req) => write!(f, "RedisMset: {}", req),
                 RedisOperation::RedisDel(req) => write!(f, "RedisDel: {}", req),
                 RedisOperation::RedisRename(req) => write!(f, "RedisRename: {}", req),
+                RedisOperation::RedisEval(req) => write!(f, "RedisEval: {}", req),
             },
         }
     }

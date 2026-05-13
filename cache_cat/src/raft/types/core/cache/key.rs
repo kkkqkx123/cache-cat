@@ -11,7 +11,7 @@ use crate::raft::types::entry::request::AtomicRequest;
 use std::sync::Arc;
 
 impl MyCache {
-    pub fn redis_rename(&self, params: RenameParams, update: &mut Update<'_, '_>) -> Value {
+    pub fn redis_rename(&self, params: RenameParams, update: &mut Update<'_>) -> Value {
         let _exclusive_lock = self.read_lock.write();
         let cached = match self.get_cache(update.db_number) {
             Err(err) => return err,
@@ -35,7 +35,7 @@ impl MyCache {
         Value::ok()
     }
 
-    pub fn redis_del(&self, params: DelParams, update: &mut Update<'_, '_>) -> Value {
+    pub fn redis_del(&self, params: DelParams, update: &mut Update<'_>) -> Value {
         let mut count = 0;
         let _exclusive_lock = self.read_lock.write();
         for key in params.keys {

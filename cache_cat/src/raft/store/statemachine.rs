@@ -231,6 +231,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                             RedisOperation::RedisRename(param) => {
                                 st.redis_rename(param, &mut update)
                             }
+                            RedisOperation::RedisEval(param) => todo!(),
                         },
                     }
                 }
