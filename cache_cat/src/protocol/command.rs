@@ -29,6 +29,7 @@ use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
+use crate::protocol::lua::eval::EvalCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -104,6 +105,8 @@ impl CommandFactory {
         factory.register("SAVE", SaveCommand);
         factory.register("SELECT", SelectCommand);
         factory.register("ECHO", EchoCommand);
+        factory.register("EVAL", EvalCommand);
+
         factory
     }
 

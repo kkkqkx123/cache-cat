@@ -1,15 +1,11 @@
 use crate::node::parsed_config::ParsedConfig;
-use crate::protocol::NO_EXPIRATION;
-use crate::protocol::key::del::DelParams;
-use crate::protocol::key::rename::RenameParams;
-use crate::protocol::string::mset::MsetParams;
-use crate::protocol::string::set::{Expiration, SetMode, SetParams};
+use crate::protocol::string::set::{SetMode, SetParams};
 use crate::raft::store::snapshot::snapshot_handler::{
     dump_cache_to_path, get_snapshot_file_name, load_cache_from_path,
 };
 use crate::raft::types::core::moka::moka::{MyCache, Update, UpdateType};
+use crate::raft::types::core::moka::request_handler::do_request;
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, InsertReq, SetReq};
 use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::{AtomicRequest, Operation, RedisOperation};
@@ -200,40 +196,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     let write_clock = st.set_write_clock(time);
                     update.db_number = db_number;
                     update.write_clock = write_clock;
-                    match req.operation {
-                        Operation::Read(read) => match read {
-                            ReadOperation::Exists(param) => st.exists(param, update.db_number),
-                            ReadOperation::Get(param) => st.get(param, update.db_number),
-                            ReadOperation::LRange(param) => st.l_range(param, update.db_number),
-                            ReadOperation::MGet(param) => st.m_get(param, update.db_number),
-                            ReadOperation::ZRange(param) => st.z_range(param, update.db_number),
-                            ReadOperation::HGet(param) => st.h_get(param, update.db_number),
-                        },
-                        Operation::Base(base) => match base {
-                            BaseOperation::Empty => Value::ok(),
-                            BaseOperation::Set(param) => st.set(param, &mut update),
-                            BaseOperation::Expire(param) => st.expire(param, &mut update),
-                            BaseOperation::LPush(param) => st.l_push(param, &mut update),
-                            BaseOperation::Del(param) => st.del(param, &mut update),
-                            BaseOperation::Incr(param) => st.incr(param, &mut update),
-                            BaseOperation::Append(param) => st.append(param, &mut update),
-                            BaseOperation::HSet(param) => st.h_set(param, &mut update),
-                            BaseOperation::HIncr(param) => st.h_incr(param, &mut update),
-                            BaseOperation::ZAdd(param) => st.z_add(param, &mut update),
-                            BaseOperation::SAdd(param) => st.s_add(param, &mut update),
-                            BaseOperation::Persist(param) => st.persist(param, &mut update),
-                            BaseOperation::Insert(param) => st.insert(param, &mut update),
-                        },
-                        Operation::Redis(redis) => match redis {
-                            RedisOperation::RedisDel(param) => st.redis_del(param, &mut update),
-                            RedisOperation::RedisSet(param) => st.redis_set(param, &mut update),
-                            RedisOperation::RedisMset(param) => st.redis_mset(param, &mut update),
-                            RedisOperation::RedisRename(param) => {
-                                st.redis_rename(param, &mut update)
-                            }
-                            RedisOperation::RedisEval(param) => todo!(),
-                        },
-                    }
+                    do_request(&self.data.kvs, req.operation, &mut update)
                 }
                 EntryPayload::Membership(mem) => {
                     raft_meta.last_membership =
