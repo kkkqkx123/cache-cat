@@ -22,6 +22,7 @@ use crate::protocol::zset::zrange::ZRangeCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::Operation;
 use std::collections::HashMap;
+use tracing::warn;
 
 pub trait RaftCommand {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError>;
@@ -70,5 +71,23 @@ impl RaftCommandFactory {
         factory.register("PERSIST", PersistCommand);
         factory.register("RENAME", RenameCommand);
         factory
+    }
+
+    pub fn parse_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
+        let cmd_name = match &items[0] {
+            Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_uppercase(),
+            Value::SimpleString(s) => s.to_uppercase(),
+            _ => return Err(ProtocolError::InvalidArgument("command")),
+        };
+        match self.commands.get(&cmd_name) {
+            Some(cmd) => match cmd.raft_request(&items) {
+                Ok(v) => Ok(v),
+                Err(e) => {
+                    warn!("Command '{}' error: {}", cmd_name, e);
+                    Err(e.into()) // Error → Value::Error
+                }
+            },
+            None => Err(ProtocolError::UnknownCommand(cmd_name)),
+        }
     }
 }

@@ -1,13 +1,56 @@
+use crate::protocol::key::del::DelParams;
 use crate::protocol::key::exists::ExistsParams;
 use crate::protocol::key::expire::ExpireCondition;
+use crate::protocol::key::rename::RenameParams;
 use crate::raft::types::core::moka::moka::{MyCache, MyValue, Update, UpdateType};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::{
     BaseOperation, DelReq, ExpireReq, InsertReq, PersistReq,
 };
 use crate::raft::types::entry::request::AtomicRequest;
+use std::sync::Arc;
 
 impl MyCache {
+    pub fn redis_rename(&self, params: RenameParams, update: &mut Update<'_, '_>) -> Value {
+        let _exclusive_lock = self.read_lock.write();
+        let cached = match self.get_cache(update.db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
+        let my_value = match cached.get(&params.key) {
+            None => return Value::Error("no such key".to_string()),
+            Some(value) => value,
+        };
+        let del = DelReq {
+            key: Arc::from(params.key),
+        };
+        self.del(del, update);
+        let new_key: Arc<Vec<u8>> = Arc::from(params.new_key);
+        let insert = InsertReq {
+            key: new_key.clone(),
+            value: my_value.data,
+            expires_at: my_value.expires_at,
+        };
+        self.insert(insert, update);
+        Value::ok()
+    }
+
+    pub fn redis_del(&self, params: DelParams, update: &mut Update<'_, '_>) -> Value {
+        let mut count = 0;
+        let _exclusive_lock = self.read_lock.write();
+        for key in params.keys {
+            let del = DelReq {
+                key: Arc::from(key),
+            };
+            match self.del(del, update) {
+                Value::Error(err) => return Value::Error(err),
+                Value::Integer(num) => count = count + num,
+                _ => {}
+            }
+        }
+        Value::Integer(count)
+    }
+
     pub fn exists(&self, exists_params: ExistsParams, db_number: u16) -> Value {
         let cache = match self.get_cache(db_number) {
             Err(err) => return err,

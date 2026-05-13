@@ -12,7 +12,8 @@ use std::option::Option;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{Mutex};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MyValue {

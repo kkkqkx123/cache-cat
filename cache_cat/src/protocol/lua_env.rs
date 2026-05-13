@@ -1,90 +1,35 @@
-use std::sync::Arc;
-use mlua::{Lua, Value, Variadic};
+use crate::protocol::raft_command::RaftCommandFactory;
+use crate::raft::types::core::response_value::Value as RaftValue;
 use mlua::prelude::LuaError;
-use moka::sync::Cache;
+use mlua::{Lua, Value, Variadic};
 
 struct LuaEnv {
     lua: Lua,
-    redis_handler: RedisHandler,
 }
 
-#[derive(Clone)]
 struct RedisHandler {
-    cache: Arc<Cache<String, String>>,
+    raft_command: RaftCommandFactory,
 }
 
 impl RedisHandler {
-    fn new() -> Self {
+    fn new() -> RedisHandler {
         RedisHandler {
-            cache: Arc::new(
-                Cache::builder()
-                    .max_capacity(10_000)
-                    .build()
-            ),
+            raft_command: RaftCommandFactory::init_lua(),
         }
     }
 
     fn call(&self, lua: &Lua, args: Variadic<String>) -> mlua::Result<Value> {
         if args.is_empty() {
-            return Err(LuaError::external("redis.call requires at least one argument"));
-        }
-
-        let command = args[0].to_uppercase();
-
-        match command.as_str() {
-            "GET" => self.handle_get(lua, &args),
-            "SET" => self.handle_set(lua, &args),
-            "DEL" => self.handle_del(lua, &args),
-            "EXISTS" => self.handle_exists(lua, &args),
-            _ => Err(LuaError::external(format!(
-                "Unknown Redis command: {}", command
-            ))),
-        }
-    }
-
-    fn handle_get(&self, lua: &Lua, args: &[String]) -> mlua::Result<Value> {
-        if args.len() != 2 {
-            return Err(LuaError::external("ERR wrong number of arguments for 'GET' command"));
-        }
-
-        let key = &args[1];
-        match self.cache.get(key) {
-            Some(value) => Ok(Value::String(lua.create_string(&value)?)),
-            None => Ok(Value::Nil),
-        }
-    }
-
-    fn handle_set(&self, lua: &Lua, args: &[String]) -> mlua::Result<Value> {
-        if args.len() < 3 {
             return Err(LuaError::external(
-                "ERR wrong number of arguments for 'SET' command"
+                "redis.call requires at least one argument",
             ));
         }
-
-        let key = &args[1];
-        let value = &args[2];
-
-        self.cache.insert(key.clone(), value.clone());
-        Ok(Value::String(lua.create_string("OK")?))
-    }
-
-    fn handle_del(&self, _lua: &Lua, args: &[String]) -> mlua::Result<Value> {
-        let mut count = 0i64;
-        for key in &args[1..] {
-            self.cache.invalidate(key);
-            count += 1;
+        let mut vec = Vec::new();
+        for param in args {
+            vec.push(RaftValue::SimpleString(param));
         }
-        Ok(Value::Integer(count))
-    }
-
-    fn handle_exists(&self, _lua: &Lua, args: &[String]) -> mlua::Result<Value> {
-        let mut count = 0i64;
-        for key in &args[1..] {
-            if self.cache.contains_key(key) {
-                count += 1;
-            }
-        }
-        Ok(Value::Integer(count))
+        let x = self.raft_command.parse_request(&vec);
+        todo!()
     }
 }
 
@@ -104,20 +49,16 @@ impl LuaEnv {
         let handler = RedisHandler::new();
         let redis_api = lua.create_table()?;
 
-        let handler_clone = handler.clone();
         redis_api.set(
             "call",
             lua.create_function(move |lua_ctx, args: Variadic<String>| {
-                handler_clone.call(lua_ctx, args)
+                handler.call(lua_ctx, args)
             })?,
         )?;
 
         globals.set("redis", redis_api)?;
 
-        Ok(LuaEnv {
-            lua,
-            redis_handler: handler,
-        })
+        Ok(LuaEnv { lua })
     }
 
     fn exec_lua(&self, cmd: &str) -> mlua::Result<Value> {

@@ -73,7 +73,7 @@ impl CacheCatApp {
             .await_ready(&self.raft)
             .await
             .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
-        let read_lock = self.state_machine.data.kvs.read_lock.read().await;
+        let read_lock = self.state_machine.data.kvs.read_lock.read();
         let my_value = self
             .state_machine
             .data
@@ -97,8 +97,9 @@ impl CacheCatApp {
             .await_ready(&self.raft)
             .await
             .map_err(|e| StorageError::WriteFailed(e.to_string()))?;
-        let _read_lock = self.state_machine.data.kvs.read_lock.read().await;
         let _write_lock = self.state_machine.data.kvs.write_lock.lock().await;
+        let _read_lock = self.state_machine.data.kvs.read_lock.read();
+
         let mut vec = Vec::new();
         for key in keys {
             let my_value = self
