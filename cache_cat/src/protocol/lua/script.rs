@@ -6,7 +6,9 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::{Operation, RedisOperation};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use sha1::{Digest, Sha1};
 use std::fmt;
+
 /// SCRIPT LOAD 的参数
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScriptLoadParams {
@@ -160,14 +162,6 @@ fn string_from_value(value: &Value, context: &str) -> Result<String, ProtocolErr
 
 pub struct ScriptCommand;
 
-impl RaftCommand for ScriptCommand {
-    fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
-        let param = ScriptParam::parse(items)?;
-        // 只读命令如 EXISTS 可能不需要 Raft 复制，这里按需处理
-        Ok(Operation::Redis(RedisOperation::RedisScript(param)))
-    }
-}
-
 #[async_trait]
 impl Command for ScriptCommand {
     async fn execute(
@@ -176,14 +170,62 @@ impl Command for ScriptCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
-        // 事务队列处理
-        if let Some(vec) = client.transaction_queue.as_mut() {
-            vec.push(self.raft_request(items)?);
-            return Ok(Value::SimpleString("QUEUED".into()));
-        }
-        let operation = self.raft_request(items)?;
-
-        // 实际执行，调用 server.app 的方法处理 ScriptCommand
-        server.app.write(operation, client.db_number).await
+        let param = ScriptParam::parse(items)?;
+        let value = match param {
+            ScriptParam::Load(v) => {
+                let mut hasher = Sha1::new();
+                hasher.update(v.script);
+                let hash = hasher.finalize().to_vec();
+                Value::BulkString(Some(hash))
+            }
+            ScriptParam::Exists(v) => {
+                let map = server.app.state_machine.data.kvs.lua_env.script_map.lock();
+                let mut exists = Vec::new();
+                for sha in v.sha1s {
+                    if map.contains_key(&sha) {
+                        exists.push(Value::Integer(1));
+                    } else {
+                        exists.push(Value::Integer(0));
+                    }
+                }
+                Value::Array(Some(exists))
+            }
+            ScriptParam::Flush(mode) => match mode.flush_mode {
+                FlushMode::Sync => {
+                    server
+                        .app
+                        .state_machine
+                        .data
+                        .kvs
+                        .lua_env
+                        .script_map
+                        .lock()
+                        .clear();
+                    Value::ok()
+                }
+                FlushMode::Async => {
+                    server
+                        .app
+                        .state_machine
+                        .data
+                        .kvs
+                        .lua_env
+                        .script_map
+                        .lock()
+                        .clear();
+                    Value::ok()
+                }
+            },
+            ScriptParam::Kill => {
+                let executor = server.app.state_machine.data.kvs.lua_env.interrupt();
+                if executor {
+                    Value::ok()
+                } else {
+                    Value::Error(String::from("ERR No scripts in execution right now."))
+                }
+            }
+            ScriptParam::Debug(_) => Value::Error("Not implemented".to_string()),
+        };
+        Ok(value)
     }
 }

@@ -60,7 +60,6 @@ pub enum RedisOperation {
     RedisRename(RenameParams),
     RedisEval(EvalParams),
     RedisExec(ExecParams),
-    RedisScript(ScriptParam),
 }
 
 impl fmt::Display for Request {
@@ -98,7 +97,6 @@ impl fmt::Display for Request {
                 RedisOperation::RedisRename(req) => write!(f, "RedisRename: {}", req),
                 RedisOperation::RedisEval(req) => write!(f, "RedisEval: {}", req),
                 RedisOperation::RedisExec(req) => write!(f, "RedisExec: {}", req),
-                RedisOperation::RedisScript(req) => write!(f, "RedisScript: {}", req),
             },
         }
     }

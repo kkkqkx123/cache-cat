@@ -48,7 +48,6 @@ pub fn do_request(my_cache: &MyCache, operation: Operation, update: &mut Update)
                 }
                 Value::Array(Some(vec))
             }
-            RedisOperation::RedisScript(_) => todo!(),
         },
     }
 }

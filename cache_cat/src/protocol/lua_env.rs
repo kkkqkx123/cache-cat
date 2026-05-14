@@ -3,12 +3,14 @@ use crate::protocol::raft_command::RaftCommandFactory;
 use crate::raft::types::core::moka::moka::{MyCache, Update};
 use crate::raft::types::core::moka::request_handler::do_request;
 use crate::raft::types::core::response_value::Value;
-use mlua::prelude::LuaError;
-use mlua::{Lua, Value as LuaValue, Variadic};
-
 use lru::LruCache;
+use mlua::prelude::LuaError;
+use mlua::{HookTriggers, Lua, Value as LuaValue, Variadic, VmState};
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 // 使用 lru crate
 
 /// LRU 缓存容量
@@ -21,9 +23,18 @@ pub struct LuaEnv {
     raft_command: RaftCommandFactory,
     // 脚本内容 → 已编译函数的缓存
     script_cache: Mutex<LruCache<String, mlua::Function>>,
+    pub script_map: Mutex<HashMap<String, String>>,
+    // 运行时设置为false，结束了设置为true
+    interrupt_flag: Arc<AtomicBool>,
 }
 
 impl LuaEnv {
+    //返回当前是否在执行
+    pub fn interrupt(&self) -> bool {
+        self.interrupt_flag
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
     pub fn new() -> Result<LuaEnv, ProtocolError> {
         let lua = Lua::new();
         lua.set_memory_limit(MAX_MEM)?;
@@ -47,6 +58,8 @@ impl LuaEnv {
             lua,
             raft_command: RaftCommandFactory::init_lua(),
             script_cache: Mutex::new(cache),
+            script_map: Mutex::new(HashMap::new()),
+            interrupt_flag: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -67,11 +80,25 @@ impl LuaEnv {
         args: &[Vec<u8>],
         update: &mut Update,
     ) -> Result<Value, ProtocolError> {
-        let func = self.get_or_compile_script(script)?;
+        self.interrupt_flag.store(false, Ordering::SeqCst);
 
+        // 2. 设置钩子
+        // HookTriggers::default().every_count(1000) 表示每执行 1000 条指令触发一次
+        let flag = self.interrupt_flag.clone();
+        // 注意：根据你提供的函数签名，回调函数接受 (lua, debug) 两个参数
+        self.lua.set_hook(
+            HookTriggers::default().every_nth_instruction(1000),
+            move |_lua, _debug| {
+                if flag.load(Ordering::Relaxed) {
+                    return Err(LuaError::external("script interrupted by host"));
+                }
+                Ok(VmState::Continue)
+            },
+        )?;
+
+        let func = self.get_or_compile_script(script)?;
         // 将 &mut Update 转换成裸指针，允许多个闭包捕获同一对象
         let update_ptr: *mut Update = update;
-
         let res = self.lua.scope(|scope| -> mlua::Result<LuaValue> {
             // ---- redis.call ----
             // 错误会直接向上抛出，中断脚本执行
@@ -155,6 +182,7 @@ impl LuaEnv {
             // 执行预先编译好的脚本
             func.call::<LuaValue>(())
         });
+        self.interrupt_flag.store(true, Ordering::SeqCst);
 
         // 将 Lua 返回值映射回内部 Value 类型
         Value::from_lua(res?, &self.lua)
