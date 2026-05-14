@@ -34,6 +34,7 @@ use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
+use crate::protocol::transaction::discard::DiscardCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -102,6 +103,7 @@ impl CommandFactory {
         factory.register("ECHO", EchoCommand);
         factory.register("EVAL", EvalCommand);
         factory.register("MULTI", MultiCommand);
+        factory.register("DISCARD", DiscardCommand);
         factory.register("EXEC", ExecCommand);
         factory.register("SMEMBERS", SMembersCommand);
         factory

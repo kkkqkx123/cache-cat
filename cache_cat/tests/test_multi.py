@@ -25,15 +25,16 @@ lua_script = """
 local result = redis.call('EVAL', "return redis.call('GET','name')", 0)
 return result
 """
-pipe.eval(lua_script, 0)
+# pipe.eval(lua_script, 0)
 
-# 执行事务
-result = pipe.execute()
-
-# 输出返回的结果
-print(result)
-# 或者逐行输出
-for i, res in enumerate(result):
-    print(f"命令 {i + 1} 的结果: {res}")
+pipe.discard()
+# # 执行事务
+# result = pipe.execute()
+#
+# # 输出返回的结果
+# print(result)
+# # 或者逐行输出
+# for i, res in enumerate(result):
+#     print(f"命令 {i + 1} 的结果: {res}")
 
 
