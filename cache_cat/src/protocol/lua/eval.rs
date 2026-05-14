@@ -135,6 +135,10 @@ impl Command for EvalCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
         let params = EvalParams::parse(items)?;
         let result = server
             .app

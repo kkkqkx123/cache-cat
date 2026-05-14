@@ -62,6 +62,10 @@ impl Command for MgetCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
         let params = MgetParams::parse(items)?;
         let values = server.app.multi_read(params.keys, client.db_number).await?;
         let mut results = Vec::with_capacity(values.len());

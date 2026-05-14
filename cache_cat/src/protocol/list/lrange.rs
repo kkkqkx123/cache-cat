@@ -76,6 +76,10 @@ impl Command for LRangeCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
         let params = Self::parse_args(items)?;
         let my_value = server.app.read(params.key, client.db_number).await?;
         match my_value {

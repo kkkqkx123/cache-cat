@@ -21,7 +21,6 @@ impl Command for SaveCommand {
         if items.len() >= 2 {
             return Err(ProtocolError::WrongArgCount("save").into());
         }
-
         let snapshot_state = server
             .app
             .state_machine

@@ -14,6 +14,7 @@ use std::num::NonZeroUsize;
 /// LRU 缓存容量
 const SCRIPT_CACHE_CAPACITY: usize = 500;
 
+const MAX_MEM: usize = 10 * 1024 * 1024;
 #[derive(Debug)]
 pub struct LuaEnv {
     lua: Lua,
@@ -25,6 +26,7 @@ pub struct LuaEnv {
 impl LuaEnv {
     pub fn new() -> Result<LuaEnv, ProtocolError> {
         let lua = Lua::new();
+        lua.set_memory_limit(MAX_MEM)?;
         // 沙箱设置（同上）
         let globals = lua.globals();
         globals.set("os", LuaValue::Nil)?;
@@ -33,6 +35,9 @@ impl LuaEnv {
         globals.set("require", LuaValue::Nil)?;
         globals.set("dofile", LuaValue::Nil)?;
         globals.set("loadfile", LuaValue::Nil)?;
+        globals.set("debug", LuaValue::Nil)?;
+        globals.set("coroutine", LuaValue::Nil)?;
+        globals.set("load", LuaValue::Nil)?;
 
         // 初始化 LRU 缓存，容量 500
         let cache =

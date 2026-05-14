@@ -39,6 +39,13 @@ pub fn do_request(my_cache: &MyCache, operation: Operation, update: &mut Update)
                 .lua_env
                 .exec_lua(my_cache, &*param.script, &param.keys, &param.args, update)
                 .unwrap_or_else(|err| err.into()),
+            RedisOperation::RedisExec(param) => {
+                let mut vec = Vec::new();
+                for operation in param.operations {
+                    vec.push(do_request(my_cache, operation, update));
+                }
+                Value::Array(Some(vec))
+            }
         },
     }
 }

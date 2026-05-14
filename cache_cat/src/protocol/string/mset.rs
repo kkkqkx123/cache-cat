@@ -72,6 +72,10 @@ impl Command for MsetCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
         // Parse arguments
         let operation = self.raft_request(items)?;
         let value = server.app.write(operation, client.db_number).await?;

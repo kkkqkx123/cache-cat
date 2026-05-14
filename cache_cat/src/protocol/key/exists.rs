@@ -65,6 +65,10 @@ impl Command for ExistsCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
         let params = ExistsParams::parse(items)?;
         let mut counter = 0;
         let values = server.app.multi_read(params.keys, client.db_number).await?;

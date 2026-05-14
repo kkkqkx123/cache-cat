@@ -56,6 +56,11 @@ impl Command for GetCommand {
         items: &[Value],
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
+        if let Some(vec) = client.transaction_queue.as_mut() {
+            vec.push(self.raft_request(items)?);
+            return Ok(Value::SimpleString(String::from("QUEUED")));
+        }
+
         let params = GetParams::parse(items)?;
         let values = server.app.read(params.key, client.db_number).await?;
         match values {
