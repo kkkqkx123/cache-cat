@@ -85,8 +85,10 @@ impl ComputeCommand for AppendReq {
 }
 
 impl MyCache {
-    pub fn redis_mset(&self, params: MsetParams, update: &mut Update<'_>) -> Value {
-        let _exclusive_lock = self.read_lock.write();
+    pub fn redis_mset(&self, params: MsetParams, update: &mut Update<'_>,external:bool) -> Value {
+        if external {
+            let _exclusive_lock = self.read_lock.write();
+        }
         for pair in params.pairs {
             let set = SetReq {
                 key: Arc::from(pair.0),

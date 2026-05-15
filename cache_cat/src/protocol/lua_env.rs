@@ -123,7 +123,7 @@ impl LuaEnv {
                         .raft_command
                         .parse_request(&vec)
                         .map_err(|e| LuaError::external(e))?;
-                    let value = do_request(cache, operation, update);
+                    let value = do_request(cache, operation, update, false);
                     if let Value::Error(e) = value {
                         return Err(LuaError::external(e));
                     }
@@ -146,7 +146,7 @@ impl LuaEnv {
                     let update = unsafe { &mut *update_ptr };
                     let result = match self.raft_command.parse_request(&vec) {
                         Ok(operation) => {
-                            do_request(cache, operation, update).into_lua_value(&self.lua)
+                            do_request(cache, operation, update, false).into_lua_value(&self.lua)
                         }
                         Err(e) => {
                             let err_table = self.lua.create_table()?;
