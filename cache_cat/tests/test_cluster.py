@@ -26,11 +26,13 @@ r.set('test6', 'test')
 print(r.rename('test6', 'test7'))
 print(r.get('test7'))
 # 1秒过期
-r.set('test10', 'test')
-print(r.get('test10'))
-print(r.save())
+r.set('test10', 'test---------')
+print(r.expire('test10', 1))
 sleep(0.99)
-print(r.get('test8'))
+print(r.get('test10'))
+r.persist('test10')
+sleep(0.3)
+print(r.get('test10'))
 
 r.set('test11', 'test')
 r = redis.Redis(

@@ -19,7 +19,7 @@ impl ComputeCommand for SAddReq {
         BaseOperation::SAdd(self.clone())
     }
 
-    fn mutate(self, mut data: MyValue) -> (Op<MyValue>, Value) {
+    fn mutate(self, mut data: MyValue, write_clock: u64) -> (Op<MyValue>, Value) {
         if let ValueObject::Set(map_arc) = &data.data {
             let mut count = 0;
             {
