@@ -28,10 +28,8 @@ print(r.get('test7'))
 # 1秒过期
 r.set('test10', 'test---------')
 print(r.expire('test10', 1))
-sleep(0.99)
 print(r.get('test10'))
 r.persist('test10')
-sleep(0.3)
 print(r.get('test10'))
 
 r.set('test11', 'test')
@@ -54,3 +52,6 @@ r.hmget('test15', ['test'])
 r.hset('test16', 'test', 'test')
 r.hdel('test16', 'test')
 print(r.hget('test16', 'test'))
+
+print(r.srem('test14', 'test'))
+print(r.smembers('test20'))
