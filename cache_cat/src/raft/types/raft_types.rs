@@ -78,7 +78,7 @@ impl CacheCatApp {
             .state_machine
             .data
             .kvs
-            .get_value_with_read_clock(key, db_number)?;
+            .get_value_with_read_clock(&key, db_number)?;
         drop(read_lock);
         Ok(my_value)
     }
@@ -106,7 +106,7 @@ impl CacheCatApp {
                 .state_machine
                 .data
                 .kvs
-                .get_value_with_read_clock(key, db_number)?;
+                .get_value_with_read_clock(&key, db_number)?;
             vec.push(my_value);
         }
         Ok(vec)

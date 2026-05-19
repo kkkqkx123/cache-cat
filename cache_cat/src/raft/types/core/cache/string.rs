@@ -10,7 +10,6 @@ use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update, UpdateTyp
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{AppendReq, BaseOperation, IncrReq, SetReq};
-use crate::raft::types::entry::request::AtomicRequest;
 use crate::utils::parse_i64;
 use std::sync::Arc;
 
@@ -40,7 +39,6 @@ impl ComputeCommand for SetReq {
         };
         let new_value = MyValue {
             version: new_version,
-            expires_at: self.ex_time,
             data,
         };
         (
@@ -62,11 +60,7 @@ impl ComputeCommand for SetReq {
         } else {
             ExpirePolicy::Absolute(self.ex_time)
         };
-        let value = MyValue {
-            version: 1,
-            expires_at: self.ex_time,
-            data,
-        };
+        let value = MyValue { version: 1, data };
         (MochaOperation::Insert { value, expire }, Value::ok())
     }
 }
@@ -212,11 +206,11 @@ impl MyCache {
                     Ok(cache) => cache,
                 };
                 // Read existing value to get its expiration time
-                match cache.get(&params.key) {
+                match cache.get_entry(&params.key) {
                     None => NO_EXPIRATION,
                     Some(value) => {
-                        let ttl_ms = value.expires_at;
-                        existing_key = match value.data {
+                        let ttl_ms = value.expire_at.unwrap_or(0);
+                        existing_key = match value.value.data {
                             ValueObject::Int(v) => {
                                 ExistingKey::Data(Arc::from(v.to_string().into_bytes()))
                             }

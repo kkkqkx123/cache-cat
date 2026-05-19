@@ -17,7 +17,6 @@ use tokio::sync::Mutex;
 pub struct MyValue {
     pub version: u32, //在快照期间每一次更新都会增加version 默认为1
     pub data: ValueObject,
-    pub expires_at: u64, //绝对时间  这里 假设不同节点的时钟偏移是有界的
 }
 
 impl MyValue {
@@ -25,7 +24,6 @@ impl MyValue {
         Self {
             version: 1,
             data: value,
-            expires_at: 0,
         }
     }
 }
@@ -120,7 +118,7 @@ impl MyCache {
     #[inline]
     pub fn get_value_with_read_clock(
         &self,
-        key: Vec<u8>,
+        key: &Vec<u8>,
         db_number: u16,
     ) -> Result<Option<MyValue>, ProtocolError> {
         let cache = self
@@ -128,17 +126,22 @@ impl MyCache {
             .get(db_number as usize)
             .ok_or(ProtocolError::DbNotExist)?;
         let read_clock = self.get_and_update_read_clock();
-        match cache.mocha.get(&Arc::new(key)) {
+        match cache.mocha.get_entry(key) {
             None => {
                 //用写逻辑时钟也获取不到 可能会产生写逻辑时钟在此刻推进了导致读不到数据。但这是符合预期的。
                 Ok(None)
             }
             Some(my_value) => {
-                if my_value.expires_at < read_clock && my_value.expires_at != 0 {
-                    //写逻辑时钟获取到了 但是读逻辑时钟没有获取到
-                    return Ok(None);
+                match my_value.expire_at {
+                    Some(inner) => {
+                        if inner < read_clock {
+                            // 写逻辑时钟获取到了但是读逻辑时钟没有获取到
+                            return Ok(None);
+                        }
+                        Ok(Some(my_value.value))
+                    }
+                    None => Ok(None),
                 }
-                Ok(Some(my_value))
             }
         }
     }

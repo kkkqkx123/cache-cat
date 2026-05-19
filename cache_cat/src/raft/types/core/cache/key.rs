@@ -1,3 +1,4 @@
+use crate::mocha::{EntryRef, ExpirePolicy, MochaOperation};
 use crate::protocol::key::del::DelParams;
 use crate::protocol::key::exists::ExistsParams;
 use crate::protocol::key::expire::ExpireCondition;
@@ -10,7 +11,6 @@ use crate::raft::types::entry::bae_operation::{
 };
 use crate::raft::types::entry::request::AtomicRequest;
 use std::sync::Arc;
-use crate::mocha::{EntryRef, ExpirePolicy, MochaOperation};
 
 impl ComputeCommand for ExpireReq {
     fn key(&self) -> Arc<Vec<u8>> {
@@ -30,10 +30,20 @@ impl ComputeCommand for ExpireReq {
         let should_update = match self.condition {
             None => true,
             Some(ref condition) => match condition {
-                ExpireCondition::Nx => entry.value.expires_at == 0,
-                ExpireCondition::Xx => entry.value.expires_at != 0,
-                ExpireCondition::Gt => entry.value.expires_at != 0 && entry.value.expires_at <= expires_at,
-                ExpireCondition::Lt => entry.value.expires_at != 0 && entry.value.expires_at >= expires_at,
+                ExpireCondition::Nx => entry.expire_at.is_none(),
+                ExpireCondition::Xx => entry.expire_at.is_some(),
+                ExpireCondition::Gt => {
+                    match entry.expire_at {
+                        None => false,                       // 无过期 = 无穷大，新过期不可能大于无穷大
+                        Some(expire) => expire < expires_at, // 旧 < 新，即新 > 旧
+                    }
+                }
+                ExpireCondition::Lt => {
+                    match entry.expire_at {
+                        None => true,                        // 无过期 = 无穷大，新过期一定小于无穷大
+                        Some(expire) => expire > expires_at, // 旧 > 新，即新 < 旧
+                    }
+                }
             },
         };
         if !should_update {
@@ -66,7 +76,7 @@ impl ComputeCommand for PersistReq {
         entry: EntryRef<MyValue>,
         write_clock: u64,
     ) -> (MochaOperation<MyValue>, Value) {
-        if entry.value.expires_at == 0 {
+        if entry.expire_at.is_none() {
             return (MochaOperation::Abort, Value::Integer(0));
         }
         (
@@ -106,10 +116,15 @@ impl ComputeCommand for InsertReq {
         };
         let new_value = MyValue {
             version: new_version,
-            expires_at: self.expires_at,
             data: self.value.clone(),
         };
-        (MochaOperation::Insert { value: new_value, expire }, Value::ok())
+        (
+            MochaOperation::Insert {
+                value: new_value,
+                expire,
+            },
+            Value::ok(),
+        )
     }
 
     fn init(self) -> (MochaOperation<MyValue>, Value) {
@@ -120,7 +135,6 @@ impl ComputeCommand for InsertReq {
         };
         let value = MyValue {
             version: 1,
-            expires_at: self.expires_at,
             data: self.value,
         };
         (MochaOperation::Insert { value, expire }, Value::ok())
@@ -141,7 +155,7 @@ impl MyCache {
             Err(err) => return err,
             Ok(cache) => cache,
         };
-        let my_value = match cached.get(&params.key) {
+        let my_value = match cached.get_entry(&params.key) {
             None => return Value::Error("no such key".to_string()),
             Some(value) => value,
         };
@@ -152,8 +166,8 @@ impl MyCache {
         let new_key: Arc<Vec<u8>> = Arc::from(params.new_key);
         let insert = InsertReq {
             key: new_key.clone(),
-            value: my_value.data,
-            expires_at: my_value.expires_at,
+            value: my_value.value.data,
+            expires_at: my_value.expire_at.unwrap_or(0),
         };
         self.insert(insert, update);
         Value::ok()
