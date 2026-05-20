@@ -7,8 +7,7 @@ use crate::raft::store::snapshot::snapshot_handler::{
 use crate::raft::types::core::mocha::mocha::{MyCache, Update, UpdateType};
 use crate::raft::types::core::mocha::request_handler::do_request;
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::entry::bae_operation::{BaseOperation, DelReq, InsertReq, SetReq};
-use crate::raft::types::entry::read_operation::ReadOperation;
+use crate::raft::types::entry::bae_operation::{BaseOperation, InsertReq, SetReq};
 use crate::raft::types::entry::request::{AtomicRequest, Operation, RedisOperation};
 use crate::raft::types::file_operator::FileOperator;
 use crate::raft::types::raft_types::{NodeId, TypeConfig};

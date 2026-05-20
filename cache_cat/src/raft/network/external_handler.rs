@@ -162,6 +162,7 @@ async fn install_full_snapshot(
     app: Arc<CacheCatApp>,
     req: InstallFullSnapshotReq,
 ) -> Result<SnapshotResponse<TypeConfig>, String> {
+    info!("snapshot  received!!!!");
     let snapshot = Snapshot {
         meta: req.snapshot_meta,
         snapshot: req.snapshot,
