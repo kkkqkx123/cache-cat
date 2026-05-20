@@ -1,14 +1,17 @@
 mod test;
 
 use crossbeam_channel::{Receiver, Sender, after, bounded, select, unbounded};
-use papaya::{Compute, Equivalent, Guard, HashMap, LocalGuard, Operation};
+use papaya::{Compute, Equivalent, Guard, HashMap, Iter, LocalGuard, Operation};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::hash::Hash;
+use std::io::SeekFrom;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
+use tokio::io;
+use tokio::io::{AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
 const WHEEL_BITS: usize = 8;
 const WHEEL_SIZE: usize = 1 << WHEEL_BITS;
@@ -375,7 +378,9 @@ where
             None => Operation::Abort(()),
         });
         let snapshot = match result {
-            Compute::Updated { new: (_, entry), .. } => Some(entry.snapshot()),
+            Compute::Updated {
+                new: (_, entry), ..
+            } => Some(entry.snapshot()),
             _ => None,
         };
         if let Some(snapshot) = &snapshot {
@@ -401,7 +406,6 @@ where
             Some(removed.snapshot())
         }
     }
-
 
     fn spawn_active_expirer(
         self: Arc<Self>,
@@ -512,40 +516,40 @@ where
     pub fn guard(&self) -> LocalGuard<'_> {
         self.map.guard()
     }
-
-    pub fn iter_snapshots<'g, G>(
-        &'g self,
-        guard: &'g G,
-    ) -> impl Iterator<Item = (K, EntrySnapshot<V>)> + 'g
+    pub async fn dump_snapshots_to_writer<W>(&self, writer: &mut W) -> Result<u64, io::Error>
     where
-        G: Guard + 'g,
+        W: AsyncWrite + AsyncSeek + Unpin + Send,
+        K: Serialize,
+        V: Serialize,
     {
+        let count_pos = writer.seek(SeekFrom::Current(0)).await?;
+        writer.write_u64(0).await?;
+        let mut entry_count = 0u64;
+        let map = self.map.pin_owned();
         let now = self.now_logical();
-        self.map.iter(guard).filter_map(move |(k, entry)| {
-            if entry.expire_at.is_some_and(|at| now >= at) {
-                None
-            } else {
-                Some((k.clone(), entry.snapshot()))
-            }
-        })
-    }
-
-    pub fn for_each_snapshot<F>(&self, mut f: F)
-    where
-        F: FnMut(&K, EntrySnapshot<V>),
-    {
-        let guard = self.map.guard();
-        let now = self.now_logical();
-
-        for (k, entry) in self.map.iter(&guard) {
+        for (key, entry) in map.iter() {
             if entry.expire_at.is_some_and(|at| now >= at) {
                 continue;
             }
-
-            f(k, entry.snapshot());
+            let snapshot = entry.snapshot();
+            let key_bytes = bincode2::serialize(key)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let val_bytes = bincode2::serialize(&snapshot)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            writer.write_u64(key_bytes.len() as u64).await?;
+            writer.write_all(&key_bytes).await?;
+            writer.write_u64(val_bytes.len() as u64).await?;
+            writer.write_all(&val_bytes).await?;
+            entry_count = entry_count
+                .checked_add(1)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "too many entries"))?;
         }
+        let end_pos = writer.seek(SeekFrom::Current(0)).await?;
+        writer.seek(SeekFrom::Start(count_pos)).await?;
+        writer.write_u64(entry_count).await?;
+        writer.seek(SeekFrom::Start(end_pos)).await?;
+        Ok(entry_count)
     }
-
     pub fn clear(&self) -> usize {
         let mg = self.map.pin();
         let count = mg.len();
