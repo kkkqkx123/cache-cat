@@ -1,7 +1,7 @@
 mod test;
 
-use crossbeam_channel::{Receiver, Sender, after, bounded, select, unbounded};
-use papaya::{Compute, Equivalent, Guard, HashMap, Iter, LocalGuard, Operation};
+use crossbeam_channel::{Receiver, Sender, bounded, select, unbounded};
+use papaya::{Compute, Equivalent, HashMap, LocalGuard, Operation};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::hash::Hash;
@@ -9,7 +9,7 @@ use std::io::SeekFrom;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io;
 use tokio::io::{AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
@@ -88,6 +88,7 @@ enum ExpireCommand<K> {
     Schedule { key: K, expire_at: u64 },
     Advance,
     AdvanceAndWait(Sender<()>),
+    HasExpiredByLocalClock { now: u64, done: Sender<bool> },
 }
 
 #[derive(Debug)]
@@ -125,6 +126,23 @@ impl<K> HierarchicalTimeWheel<K> {
         let slot = Self::slot_for(item.expire_at, level);
 
         self.wheels[level][slot].push(item);
+    }
+
+    fn has_due<F>(&self, now: u64, mut is_current: F) -> bool
+    where
+        F: FnMut(&K, u64) -> bool,
+    {
+        for level in 0..WHEEL_LEVELS {
+            for slot in 0..WHEEL_SIZE {
+                for item in &self.wheels[level][slot] {
+                    if item.expire_at <= now && is_current(&item.key, item.expire_at) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     fn advance_to<F>(&mut self, now: u64, mut expire: F)
@@ -221,7 +239,7 @@ where
     K: Clone + Eq + Hash + Ord + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    map: HashMap<K, Entry<V>>,
+    map: Arc<HashMap<K, Entry<V>>>,
     logic_clock: Arc<AtomicU64>,
     expire_tx: Sender<ExpireCommand<K>>,
 }
@@ -231,21 +249,28 @@ where
     K: Hash + Eq + Ord + Clone + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    pub fn new(logic_clock: Arc<AtomicU64>, idle_expire_interval: Duration) -> Arc<Self> {
+    pub fn new(logic_clock: Arc<AtomicU64>) -> Self {
         let (expire_tx, expire_rx) = unbounded();
-        let mocha = Arc::new(Self {
-            map: HashMap::new(),
+        let map = Arc::new(HashMap::new());
+
+        Self::spawn_active_expirer(map.clone(), logic_clock.clone(), expire_rx);
+
+        Self {
+            map,
             logic_clock,
             expire_tx,
-        });
-        let _ = mocha
-            .clone()
-            .spawn_active_expirer(expire_rx, idle_expire_interval);
-        mocha
+        }
     }
 
     fn now_logical(&self) -> u64 {
         self.logic_clock.load(Ordering::Relaxed)
+    }
+
+    fn now_local() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0)
     }
 
     fn resolve_expire_at(&self, policy: ExpirePolicy) -> Option<u64> {
@@ -286,8 +311,17 @@ where
     }
 
     fn remove_expired_if_current(&self, key: K, expire_at: u64) -> bool {
-        let now = self.now_logical();
-        let mg = self.map.pin();
+        Self::remove_expired_if_current_from(&self.map, &self.logic_clock, key, expire_at)
+    }
+
+    fn remove_expired_if_current_from(
+        map: &HashMap<K, Entry<V>>,
+        logic_clock: &AtomicU64,
+        key: K,
+        expire_at: u64,
+    ) -> bool {
+        let now = logic_clock.load(Ordering::Relaxed);
+        let mg = map.pin();
         matches!(
             mg.compute(key, |entry| match entry {
                 Some((_, entry)) if entry.expire_at == Some(expire_at) && now >= expire_at => {
@@ -296,6 +330,15 @@ where
                 _ => Operation::Abort(()),
             }),
             Compute::Removed(_, _)
+        )
+    }
+
+    fn has_expired_if_current_from(map: &HashMap<K, Entry<V>>, key: &K, expire_at: u64) -> bool {
+        let mg = map.pin();
+
+        matches!(
+            mg.get(key),
+            Some(entry) if entry.expire_at == Some(expire_at)
         )
     }
 
@@ -408,73 +451,83 @@ where
     }
 
     fn spawn_active_expirer(
-        self: Arc<Self>,
+        map: Arc<HashMap<K, Entry<V>>>,
+        logic_clock: Arc<AtomicU64>,
         expire_rx: Receiver<ExpireCommand<K>>,
-        idle_expire_interval: Duration,
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || {
-            self.expire_worker(expire_rx, idle_expire_interval);
+            Self::expire_worker(map, logic_clock, expire_rx);
         })
     }
 
     fn expire_worker(
-        self: Arc<Self>,
+        map: Arc<HashMap<K, Entry<V>>>,
+        logic_clock: Arc<AtomicU64>,
         expire_rx: Receiver<ExpireCommand<K>>,
-        idle_expire_interval: Duration,
     ) {
-        let mut wheel = HierarchicalTimeWheel::new(self.now_logical());
+        let mut wheel = HierarchicalTimeWheel::new(logic_clock.load(Ordering::Relaxed));
 
         loop {
-            let timeout = after(idle_expire_interval);
-
             select! {
                 recv(expire_rx) -> msg => {
                     let Ok(cmd) = msg else {
                         return;
                     };
 
-                    self.handle_expire_command(&mut wheel, cmd);
+                    Self::handle_expire_command(&map, &logic_clock, &mut wheel, cmd);
 
                     while let Ok(cmd) = expire_rx.try_recv() {
-                        self.handle_expire_command(&mut wheel, cmd);
+                        Self::handle_expire_command(&map, &logic_clock, &mut wheel, cmd);
                     }
-                }
-
-                recv(timeout) -> _ => {
-                    self.advance_wheel(&mut wheel);
                 }
             }
         }
     }
 
-    fn handle_expire_command(&self, wheel: &mut HierarchicalTimeWheel<K>, cmd: ExpireCommand<K>) {
+    fn handle_expire_command(
+        map: &HashMap<K, Entry<V>>,
+        logic_clock: &AtomicU64,
+        wheel: &mut HierarchicalTimeWheel<K>,
+        cmd: ExpireCommand<K>,
+    ) {
         match cmd {
             ExpireCommand::Schedule { key, expire_at } => {
-                self.advance_wheel(wheel);
+                Self::advance_wheel(map, logic_clock, wheel);
 
-                let now = self.now_logical();
+                let now = logic_clock.load(Ordering::Relaxed);
 
                 if expire_at <= now {
-                    self.remove_expired_if_current(key, expire_at);
+                    Self::remove_expired_if_current_from(map, logic_clock, key, expire_at);
                 } else {
                     wheel.insert(TimerItem { key, expire_at });
                 }
             }
             ExpireCommand::Advance => {
-                self.advance_wheel(wheel);
+                Self::advance_wheel(map, logic_clock, wheel);
             }
             ExpireCommand::AdvanceAndWait(done) => {
-                self.advance_wheel(wheel);
+                Self::advance_wheel(map, logic_clock, wheel);
                 let _ = done.send(());
+            }
+            ExpireCommand::HasExpiredByLocalClock { now, done } => {
+                let has_expired = wheel.has_due(now, |key, expire_at| {
+                    Self::has_expired_if_current_from(map, key, expire_at)
+                });
+
+                let _ = done.send(has_expired);
             }
         }
     }
 
-    fn advance_wheel(&self, wheel: &mut HierarchicalTimeWheel<K>) {
-        let now = self.now_logical();
+    fn advance_wheel(
+        map: &HashMap<K, Entry<V>>,
+        logic_clock: &AtomicU64,
+        wheel: &mut HierarchicalTimeWheel<K>,
+    ) {
+        let now = logic_clock.load(Ordering::Relaxed);
 
         wheel.advance_to(now, |key, expire_at| {
-            self.remove_expired_if_current(key, expire_at);
+            Self::remove_expired_if_current_from(map, logic_clock, key, expire_at);
         });
     }
 
@@ -513,9 +566,43 @@ where
         let _ = done_rx.recv();
     }
 
+    pub fn has_expired_by_local_clock(&self) -> bool {
+        let (done_tx, done_rx) = bounded(1);
+
+        if self
+            .expire_tx
+            .send(ExpireCommand::HasExpiredByLocalClock {
+                now: Self::now_local(),
+                done: done_tx,
+            })
+            .is_err()
+        {
+            return false;
+        }
+        done_rx.recv().unwrap_or(false)
+    }
+    pub async fn has_expired_by_local_clock_async(&self) -> bool {
+        let (done_tx, done_rx) = bounded(1);
+
+        if self
+            .expire_tx
+            .send(ExpireCommand::HasExpiredByLocalClock {
+                now: Self::now_local(),
+                done: done_tx,
+            })
+            .is_err()
+        {
+            return false;
+        }
+        tokio::task::spawn_blocking(move || done_rx.recv().unwrap_or(false))
+            .await
+            .unwrap_or(false)
+    }
+
     pub fn guard(&self) -> LocalGuard<'_> {
         self.map.guard()
     }
+
     pub async fn dump_snapshots_to_writer<W>(&self, writer: &mut W) -> Result<u64, io::Error>
     where
         W: AsyncWrite + AsyncSeek + Unpin + Send,

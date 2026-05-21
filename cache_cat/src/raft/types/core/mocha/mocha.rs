@@ -32,7 +32,7 @@ impl MyValue {
 #[derive(Debug)]
 pub struct Database {
     // pub cache: Cache<Arc<Vec<u8>>, MyValue>,
-    pub mocha: Arc<Mocha<Arc<Vec<u8>>, MyValue>>,
+    pub mocha: Mocha<Arc<Vec<u8>>, MyValue>,
 }
 impl Clone for Database {
     fn clone(&self) -> Self {
@@ -100,7 +100,7 @@ impl MyCache {
         let write_logic_clock = Arc::new(AtomicU64::new(0));
         let mut vec = Vec::new();
         for _ in 0..db_number {
-            let mocha = Mocha::new(write_logic_clock.clone(), Duration::from_secs(10));
+            let mocha = Mocha::new(write_logic_clock.clone());
             let db = Database { mocha };
             vec.push(db);
         }
