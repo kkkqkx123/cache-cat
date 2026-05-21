@@ -298,20 +298,12 @@ where
         let new_entry = self.make_entry(value, policy);
         let snapshot = new_entry.snapshot();
         let expire_at = new_entry.expire_at;
-
-        {
-            let mg = self.map.pin();
-            mg.insert(key.clone(), new_entry);
-        }
-
+        let mg = self.map.pin();
+        mg.insert(key.clone(), new_entry);
         self.enqueue_expiry(key, expire_at);
         snapshot
     }
-
-    fn remove_expired_if_current(&self, key: K, expire_at: u64) -> bool {
-        Self::remove_expired_if_current_from(&self.map, &self.logic_clock, key, expire_at)
-    }
-
+    
     fn remove_expired_if_current_from(
         map: &HashMap<K, Entry<V>>,
         logic_clock: &AtomicU64,
