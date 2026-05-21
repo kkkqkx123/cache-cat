@@ -42,6 +42,7 @@ use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tracing::warn;
+use crate::protocol::connection::time::TimeCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -120,6 +121,7 @@ impl CommandFactory {
         factory.register("SREM", SRemCommand);
         factory.register("SETBIT", SetBitCommand);
         factory.register("GETBIT", GetBitCommand);
+        factory.register("TIME", TimeCommand);
 
         factory
     }

@@ -71,3 +71,5 @@ print(r.getbit(key, 0))
 print(r.getbit(key, 7))
 print(r.getbit(key, 8))
 print(r.getbit(key, 10))
+
+print(r.time())
