@@ -4,12 +4,11 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::raft_types::CacheCatApp;
 use bytes::{Buf, BytesMut};
 use futures::{FutureExt, SinkExt, StreamExt, future::BoxFuture, stream::FuturesOrdered};
-use std::collections::HashMap;
 use std::io::Result as IoResult;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::broadcast;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use tracing::{debug, error, info, warn};
 
@@ -47,6 +46,17 @@ impl Encoder<Value> for RespCodec {
 }
 
 impl RedisServer {
+    pub fn new(
+        app: Arc<CacheCatApp>,
+        redis_addr: String,
+        cmd_factory: Arc<CommandFactory>,
+    ) -> Self {
+        Self {
+            app,
+            redis_addr,
+            cmd_factory,
+        }
+    }
     #[inline(always)]
     async fn process_command(&self, db_number: &mut Client, value: Value) -> Value {
         self.cmd_factory.execute(db_number, value, &self).await
@@ -57,6 +67,7 @@ impl RedisServer {
         stream: TcpStream,
         peer_addr: SocketAddr,
     ) -> IoResult<()> {
+        stream.set_nodelay(true)?;
         let framed = Framed::new(stream, RespCodec);
         let (mut writer, mut reader) = framed.split();
         let mut client = Client {
@@ -91,6 +102,7 @@ impl RedisServer {
         stream: TcpStream,
         peer_addr: SocketAddr,
     ) -> IoResult<()> {
+        stream.set_nodelay(true)?;
         let framed = Framed::new(stream, RespCodec);
         let (mut writer, mut reader) = framed.split();
 
@@ -163,7 +175,7 @@ impl RedisServer {
                     let server = Arc::clone(&self);
 
                     tokio::spawn(async move {
-                        if let Err(e) = server.handle_connection_pipeline(stream, peer_addr).await {
+                        if let Err(e) = server.handle_connection(stream, peer_addr).await {
                             error!("Error handling connection from {}: {}", peer_addr, e);
                         }
                     });

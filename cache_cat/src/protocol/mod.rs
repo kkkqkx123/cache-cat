@@ -12,6 +12,7 @@ pub mod zset;
 
 pub mod bitmap;
 pub mod lua_env;
+pub mod pub_sub;
 mod raft_command;
 
 /// Current format version for all encoded types (stored in high 4 bits of flags)
