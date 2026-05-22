@@ -175,7 +175,7 @@ impl RedisServer {
                     let server = Arc::clone(&self);
 
                     tokio::spawn(async move {
-                        if let Err(e) = server.handle_connection(stream, peer_addr).await {
+                        if let Err(e) = server.handle_connection_pipeline(stream, peer_addr).await {
                             error!("Error handling connection from {}: {}", peer_addr, e);
                         }
                     });
