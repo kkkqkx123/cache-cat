@@ -71,6 +71,6 @@ impl BlockCommand for SubscribeCommand {
         server: &RedisServer,
     ) -> Result<(Value, watch::Receiver<Option<Value>>), CacheCatError> {
         let params = SubscribeParams::parse(items)?;
-        Ok(server.broadcast.subscribe(params.channels).await)
+        Ok(server.broadcast.subscribe(params.channels, client.id).await)
     }
 }

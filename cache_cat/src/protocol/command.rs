@@ -23,7 +23,9 @@ use crate::protocol::list::lrange::LRangeCommand;
 use crate::protocol::lua::eval::EvalCommand;
 use crate::protocol::lua::evalsha::EvalShaCommand;
 use crate::protocol::lua::script::{ScriptCommand, ScriptParam};
+use crate::protocol::pub_sub::publish::PublishCommand;
 use crate::protocol::pub_sub::subscribe::SubscribeCommand;
+use crate::protocol::pub_sub::unsubscribe::UnsubscribeCommand;
 use crate::protocol::set::sadd::SAddCommand;
 use crate::protocol::set::smembers::SMembersCommand;
 use crate::protocol::set::srem::SRemCommand;
@@ -46,11 +48,10 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use tokio::sync::watch;
 use tracing::warn;
-use crate::protocol::pub_sub::publish::PublishCommand;
 
 pub enum CommandResult {
     Immediate(Value),
-    Stream(Value, watch::Receiver<Option<Value>>),
+    Subscribe(Value, watch::Receiver<Option<Value>>),
 }
 
 #[async_trait]
@@ -77,6 +78,7 @@ pub trait BlockCommand: Send + Sync {
 
 #[derive(Debug)]
 pub struct Client {
+    pub id: u64,
     pub db_number: u16,
     pub transaction_queue: Option<Vec<Operation>>,
 }
@@ -148,6 +150,7 @@ impl CommandFactory {
         factory.register("GETBIT", GetBitCommand);
         factory.register("TIME", TimeCommand);
         factory.register("PUBLISH", PublishCommand);
+        factory.register("UNSUBSCRIBE", UnsubscribeCommand);
 
         factory.register_block("SUBSCRIBE", SubscribeCommand);
 
@@ -182,7 +185,7 @@ impl CommandFactory {
                 if let Some(cmd) = self.block_commands.get(&cmd_name) {
                     match cmd.execute(client, &items, server).await {
                         Ok(v) => {
-                            return CommandResult::Stream(v.0, v.1);
+                            return CommandResult::Subscribe(v.0, v.1);
                         }
                         Err(e) => {
                             warn!("Command '{}' error: {}", cmd_name, e);

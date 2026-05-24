@@ -2,9 +2,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, watch};
 use crate::raft::types::core::response_value::Value;
+
+// 订阅者信息，包含客户端ID和发送端
+struct Subscriber {
+    client_id: u64,
+    sender: watch::Sender<Option<Value>>,
+}
+
 pub struct PubSub {
-    subs: Arc<RwLock<HashMap<Vec<u8>, Vec<watch::Sender<Option<Value>>>>>>,
-    patterns: Arc<RwLock<HashMap<Vec<u8>, Vec<watch::Sender<Option<Value>>>>>>,
+    subs: Arc<RwLock<HashMap<Vec<u8>, Vec<Subscriber>>>>,
+    patterns: Arc<RwLock<HashMap<Vec<u8>, Vec<Subscriber>>>>,
 }
 
 impl PubSub {
@@ -16,13 +23,13 @@ impl PubSub {
     }
 
     /// 订阅多个精确频道
-    pub async fn subscribe(&self, channels: Vec<Vec<u8>>) -> (Value, watch::Receiver<Option<Value>>) {
+    pub async fn subscribe(&self, channels: Vec<Vec<u8>>, client_id: u64) -> (Value, watch::Receiver<Option<Value>>) {
         let (tx_main, rx_main) = watch::channel(None);
         let mut subs_rx = Vec::new();
         let mut responses = Vec::new();
 
         for channel in channels {
-            let (resp, rx) = self.subscribe_single(channel).await;
+            let (resp, rx) = self.subscribe_single(channel, client_id).await;
             // 将 subscribe_single 返回的数组元素展开
             if let Value::Array(Some(mut elements)) = resp {
                 responses.append(&mut elements);
@@ -37,14 +44,22 @@ impl PubSub {
         (aggregated_resp, rx_main)
     }
 
-    async fn subscribe_single(&self, channel: Vec<u8>) -> (Value, watch::Receiver<Option<Value>>) {
+    async fn subscribe_single(&self, channel: Vec<u8>, client_id: u64) -> (Value, watch::Receiver<Option<Value>>) {
         let (tx, rx) = watch::channel(None);
+        let subscriber = Subscriber {
+            client_id,
+            sender: tx,
+        };
+
         let mut subs = self.subs.write().await;
         subs.entry(channel.clone())
             .or_insert_with(Vec::new)
-            .push(tx);
+            .push(subscriber);
 
-        let count = subs.get(&channel).map(|v| v.len()).unwrap_or(0) as i64;
+        let count = subs.get(&channel)
+            .map(|v| v.len())
+            .unwrap_or(0) as i64;
+
         let resp = Value::Array(Some(vec![
             Value::SimpleString("subscribe".to_string()),
             Value::BulkString(Some(channel)),
@@ -53,34 +68,105 @@ impl PubSub {
         (resp, rx)
     }
 
-    pub async fn unsubscribe(&self, channel: &[u8]) -> Result<Value, Value> {
-        let mut subs = self.subs.write().await;
-        if let Some(senders) = subs.get_mut(channel) {
-            if let Some(tx) = senders.pop() {
-                let _ = tx.send(None);
-                let count = senders.len() as i64;
-                let resp = Value::Array(Some(vec![
-                    Value::SimpleString("unsubscribe".to_string()),
-                    Value::BulkString(Some(channel.to_vec())),
-                    Value::Integer(count),
-                ]));
-                if senders.is_empty() {
-                    subs.remove(channel);
-                }
-                return Ok(resp);
+    /// 退订多个精确频道
+    pub async fn unsubscribe(&self, channels: Vec<Vec<u8>>, client_id: u64) -> Value {
+        let mut responses = Vec::new();
+
+        for channel in channels {
+            let resp = self.unsubscribe_single(channel, client_id).await;
+            if let Value::Array(Some(mut elements)) = resp {
+                responses.append(&mut elements);
             }
         }
-        Err(Value::error("no such subscription"))
+
+        Value::Array(Some(responses))
+    }
+
+    /// 退订单个精确频道
+    async fn unsubscribe_single(&self, channel: Vec<u8>, client_id: u64) -> Value {
+        let mut subs = self.subs.write().await;
+        match subs.get_mut(&channel) {
+            Some(subscribers) => {
+                // 先记录移除前的数量
+                let count = subscribers.len() as i64;
+
+                if let Some(pos) = subscribers.iter().position(|s| s.client_id == client_id) {
+                    let subscriber = subscribers.remove(pos);
+                    let _ = subscriber.sender.send(None);
+
+                    if subscribers.is_empty() {
+                        subs.remove(&channel);
+                    }
+
+                    Value::Array(Some(vec![
+                        Value::SimpleString("unsubscribe".to_string()),
+                        Value::BulkString(Some(channel)),
+                        Value::Integer(count),  // 使用移除前的数量
+                    ]))
+                } else {
+                    // 客户端没有订阅这个频道
+                    Value::Array(Some(vec![
+                        Value::SimpleString("unsubscribe".to_string()),
+                        Value::BulkString(Some(channel)),
+                        Value::Integer(count),
+                    ]))
+                }
+            }
+            None => {
+                Value::Array(Some(vec![
+                    Value::SimpleString("unsubscribe".to_string()),
+                    Value::BulkString(Some(channel)),
+                    Value::Integer(0),
+                ]))
+            }
+        }
+    }
+
+    /// 退订客户端的所有频道（不包括模式订阅）
+    pub async fn unsubscribe_all_channels(&self, client_id: u64) -> Value {
+        let mut subs = self.subs.write().await;
+        let mut responses = Vec::new();
+
+        // 收集需要退订的频道
+        let channels_to_unsubscribe: Vec<Vec<u8>> = subs.iter()
+            .filter(|(_, subscribers)| subscribers.iter().any(|s| s.client_id == client_id))
+            .map(|(channel, _)| channel.clone())
+            .collect();
+
+        // 退订所有频道
+        for channel in channels_to_unsubscribe {
+            if let Some(subscribers) = subs.get_mut(&channel) {
+                // 先记录移除前的数量
+                let count = subscribers.len() as i64;
+
+                if let Some(pos) = subscribers.iter().position(|s| s.client_id == client_id) {
+                    let subscriber = subscribers.remove(pos);
+                    let _ = subscriber.sender.send(None);
+
+                    if subscribers.is_empty() {
+                        subs.remove(&channel);
+                    }
+
+                    responses.push(Value::Array(Some(vec![
+                        Value::SimpleString("unsubscribe".to_string()),
+                        Value::BulkString(Some(channel)),
+                        Value::Integer(count),  // 使用移除前的数量
+                    ])));
+                }
+            }
+        }
+
+        Value::Array(Some(responses))
     }
 
     /// 订阅多个模式
-    pub async fn psubscribe(&self, patterns: Vec<Vec<u8>>) -> (Value, watch::Receiver<Option<Value>>) {
+    pub async fn psubscribe(&self, patterns: Vec<Vec<u8>>, client_id: u64) -> (Value, watch::Receiver<Option<Value>>) {
         let (tx_main, rx_main) = watch::channel(None);
         let mut patterns_rx = Vec::new();
         let mut responses = Vec::new();
 
         for pattern in patterns {
-            let (resp, rx) = self.psubscribe_single(pattern).await;
+            let (resp, rx) = self.psubscribe_single(pattern, client_id).await;
             responses.push(resp);
             patterns_rx.push(rx);
         }
@@ -90,14 +176,22 @@ impl PubSub {
         (aggregated_resp, rx_main)
     }
 
-    async fn psubscribe_single(&self, pattern: Vec<u8>) -> (Value, watch::Receiver<Option<Value>>) {
+    async fn psubscribe_single(&self, pattern: Vec<u8>, client_id: u64) -> (Value, watch::Receiver<Option<Value>>) {
         let (tx, rx) = watch::channel(None);
+        let subscriber = Subscriber {
+            client_id,
+            sender: tx,
+        };
+
         let mut patterns = self.patterns.write().await;
         patterns.entry(pattern.clone())
             .or_insert_with(Vec::new)
-            .push(tx);
+            .push(subscriber);
 
-        let count = patterns.get(&pattern).map(|v| v.len()).unwrap_or(0) as i64;
+        let count = patterns.get(&pattern)
+            .map(|v| v.len())
+            .unwrap_or(0) as i64;
+
         let resp = Value::Array(Some(vec![
             Value::SimpleString("psubscribe".to_string()),
             Value::BulkString(Some(pattern)),
@@ -106,18 +200,24 @@ impl PubSub {
         (resp, rx)
     }
 
-    pub async fn punsubscribe(&self, pattern: &[u8]) -> Result<Value, Value> {
+    pub async fn punsubscribe(&self, pattern: &[u8], client_id: u64) -> Result<Value, Value> {
         let mut patterns = self.patterns.write().await;
-        if let Some(senders) = patterns.get_mut(pattern) {
-            if let Some(tx) = senders.pop() {
-                let _ = tx.send(None);
-                let count = senders.len() as i64;
+        if let Some(subscribers) = patterns.get_mut(pattern) {
+            // 先记录移除前的数量
+            let count = subscribers.len() as i64;
+
+            // 查找并移除指定客户端的订阅者
+            if let Some(pos) = subscribers.iter().position(|s| s.client_id == client_id) {
+                let subscriber = subscribers.remove(pos);
+                let _ = subscriber.sender.send(None);
+
                 let resp = Value::Array(Some(vec![
                     Value::SimpleString("punsubscribe".to_string()),
                     Value::BulkString(Some(pattern.to_vec())),
-                    Value::Integer(count),
+                    Value::Integer(count),  // 使用移除前的数量
                 ]));
-                if senders.is_empty() {
+
+                if subscribers.is_empty() {
                     patterns.remove(pattern);
                 }
                 return Ok(resp);
@@ -141,9 +241,9 @@ impl PubSub {
         let mut delivered = 0;
 
         let subs = self.subs.read().await;
-        if let Some(senders) = subs.get(channel) {
-            for tx in senders {
-                if tx.send(Some(message.clone())).is_ok() {
+        if let Some(subscribers) = subs.get(channel) {
+            for subscriber in subscribers {
+                if subscriber.sender.send(Some(message.clone())).is_ok() {
                     delivered += 1;
                 }
             }
@@ -151,10 +251,10 @@ impl PubSub {
         drop(subs);
 
         let patterns = self.patterns.read().await;
-        for (pattern, senders) in patterns.iter() {
+        for (pattern, subscribers) in patterns.iter() {
             if matches_pattern(channel, pattern) {
-                for tx in senders {
-                    if tx.send(Some(message.clone())).is_ok() {
+                for subscriber in subscribers {
+                    if subscriber.sender.send(Some(message.clone())).is_ok() {
                         delivered += 1;
                     }
                 }
@@ -162,6 +262,7 @@ impl PubSub {
         }
         Value::Integer(delivered)
     }
+
 }
 
 // ================== 合并多个订阅流（修复 recv 问题） ==================
@@ -242,4 +343,3 @@ pub fn matches_pattern(channel: &[u8], pattern: &[u8]) -> bool {
         }
     }
 }
-
