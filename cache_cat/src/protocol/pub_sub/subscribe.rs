@@ -74,7 +74,8 @@ impl BlockCommand for SubscribeCommand {
         Ok(server.broadcast.subscribe(params.channels, client.id).await)
     }
 
+
     fn can_handle_unblock(&self, cmd_name: &str) -> bool {
-        true
+        cmd_name == "UNSUBSCRIBE" || cmd_name == "PING"
     }
 }

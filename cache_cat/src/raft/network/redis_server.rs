@@ -4,14 +4,13 @@ use crate::raft::network::pub_sub::PubSub;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::raft_types::CacheCatApp;
 use bytes::{Buf, BytesMut};
-use futures::{FutureExt, SinkExt, StreamExt, future::BoxFuture, stream::FuturesOrdered};
-use parking_lot::Mutex;
+use futures::{future::BoxFuture, stream::FuturesOrdered};
 use std::io::Result as IoResult;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{Decoder, Encoder, Framed};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct RedisServer {
@@ -73,6 +72,7 @@ impl RedisServer {
             db_number: 0,
             transaction_queue: None,
             id: client_id,
+            closed: false,
         };
         self.cmd_factory
             .process_connection(&self, &mut framed, client)

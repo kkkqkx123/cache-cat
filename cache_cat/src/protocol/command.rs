@@ -45,14 +45,12 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use futures::StreamExt;
-use futures::stream::SplitSink;
 use futures::{Sink, SinkExt, Stream};
 use std::collections::HashMap;
-use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::watch;
-use tokio_util::codec::Framed;
 use tracing::{error, warn};
+use crate::protocol::connection::quit::QuitCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -86,6 +84,7 @@ pub struct Client {
     pub id: u64,
     pub db_number: u16,
     pub transaction_queue: Option<Vec<Operation>>,
+    pub closed: bool,
 }
 
 /// Command factory for creating and executing commands
@@ -121,7 +120,7 @@ impl CommandFactory {
         factory.register("ECHO", EchoCommand);
         factory.register("TIME", TimeCommand);
         factory.register("SELECT", SelectCommand);
-
+        factory.register("QUIT", QuitCommand);
         // Register data commands
         factory.register("GET", GetCommand);
         factory.register("SET", SetCommand);
@@ -135,52 +134,39 @@ impl CommandFactory {
         factory.register("EXISTS", ExistsCommand);
         factory.register("PERSIST", PersistCommand);
         factory.register("RENAME", RenameCommand);
-
         // List commands
         factory.register("LPUSH", LPushCommand);
         factory.register("LRANGE", LRangeCommand);
-
         // Hash commands
         factory.register("HSET", HSetCommand);
         factory.register("HGET", HGetCommand);
         factory.register("HINCRBY", HIncrByCommand);
         factory.register("HMGET", HMGetCommand);
         factory.register("HDEL", HDelCommand);
-
         // Set commands
         factory.register("SADD", SAddCommand);
         factory.register("SMEMBERS", SMembersCommand);
         factory.register("SREM", SRemCommand);
-
         // ZSet commands
         factory.register("ZADD", ZAddCommand);
         factory.register("ZRANGE", ZRangeCommand);
-
         // Bitmap commands
         factory.register("SETBIT", SetBitCommand);
         factory.register("GETBIT", GetBitCommand);
-
         // Lua scripting
         factory.register("EVAL", EvalCommand);
         factory.register("EVALSHA", EvalShaCommand);
         factory.register("SCRIPT", ScriptCommand);
-
         // Transaction commands
         factory.register("MULTI", MultiCommand);
         factory.register("DISCARD", DiscardCommand);
         factory.register("EXEC", ExecCommand);
-
         // Connection management
         factory.register("BGSAVE", BgsaveCommand);
         factory.register("SAVE", SaveCommand);
-
         // Pub/Sub commands
         factory.register("PUBLISH", PublishCommand);
-
-        // Block commands (can be unblocked)
         factory.register_block("SUBSCRIBE", SubscribeCommand);
-
-        // UNSUBSCRIBE can be both a regular command and an unblock command
         factory.register("UNSUBSCRIBE", UnsubscribeCommand);
 
         factory
@@ -214,6 +200,9 @@ impl CommandFactory {
                 .await
             {
                 return Err(e);
+            }
+            if client.closed {
+                return Ok(());
             }
         }
     }
@@ -333,7 +322,7 @@ impl CommandFactory {
                                             }
                                         } else if let Some(cmd) = self.commands.get(&cmd_name) {
                                             transport.send(
-                                                Value::error("ERR command not allowed in blocking mode")
+                                                Value::error("ERR only (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context")
                                             ).await?;
                                         } else {
                                             transport.send(
