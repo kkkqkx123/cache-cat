@@ -14,7 +14,9 @@
 //!   - number of channels the client is currently subscribed to
 
 use crate::error::{CacheCatError, ProtocolError};
-use crate::protocol::command::{BlockCommand, Client};
+use crate::protocol::command::{BlockCommand, Client, ParsedCommand};
+use crate::protocol::connection::ping::PingParam;
+use crate::protocol::pub_sub::unsubscribe::UnsubscribeParams;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
@@ -74,8 +76,40 @@ impl BlockCommand for SubscribeCommand {
         Ok(server.broadcast.subscribe(params.channels, client.id).await)
     }
 
-
-    fn can_handle_unblock(&self, cmd_name: &str) -> bool {
-        cmd_name == "UNSUBSCRIBE" || cmd_name == "PING"
+    async fn execute_during_block(
+        &self,
+        client: &mut Client,
+        cmd: &ParsedCommand,
+        server: &RedisServer,
+    ) -> Result<Value, CacheCatError> {
+        if cmd.name == "UNSUBSCRIBE" {
+            let params = UnsubscribeParams::parse(&cmd.items)?;
+            let result = match params.channels {
+                None => server.broadcast.unsubscribe_all_channels(client.id).await,
+                Some(channels) => server.broadcast.unsubscribe(channels, client.id).await,
+            };
+            Ok(result)
+        } else if cmd.name == "SUBSCRIBE" {
+            let params = SubscribeParams::parse(&cmd.items)?;
+            Ok(server
+                .broadcast
+                .subscribe(params.channels, client.id)
+                .await
+                .0)
+        } else if cmd.name == "PING" {
+            let params = PingParam::parse(&cmd.items)?;
+            return Ok(Value::Array(Some(vec![
+                Value::SimpleString("PONG".to_string()),
+                Value::BulkString(params.message),
+            ])));
+        } else if cmd.name == "QUIT" {
+            client.closed = true;
+            return Ok(Value::ok());
+        } else {
+            let resp = Value::error(
+                "ERR only (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context",
+            );
+            return Ok(resp);
+        }
     }
 }

@@ -34,7 +34,7 @@ pub struct UnsubscribeParams {
 impl UnsubscribeParams {
     /// Parse UNSUBSCRIBE command parameters from RESP array items
     /// Format: UNSUBSCRIBE [channel [channel ...]]
-    fn parse(items: &[Value]) -> Result<Self, ProtocolError> {
+    pub fn parse(items: &[Value]) -> Result<Self, ProtocolError> {
         match items.len() {
             // UNSUBSCRIBE with no arguments - unsubscribe from all
             1 => Ok(UnsubscribeParams { channels: None }),

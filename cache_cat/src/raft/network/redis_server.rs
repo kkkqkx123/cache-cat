@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use tracing::{error, info};
+use crate::error::CacheCatError;
 
 #[derive(Clone)]
 pub struct RedisServer {
@@ -65,7 +66,7 @@ impl RedisServer {
         stream: TcpStream,
         peer_addr: SocketAddr,
         client_id: u64,
-    ) -> IoResult<()> {
+    ) -> Result<(), CacheCatError> {
         stream.set_nodelay(true)?;
         let mut framed = Framed::new(stream, RespCodec);
         let client = Client {
