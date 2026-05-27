@@ -4,6 +4,7 @@ use crate::raft::types::raft_types::{Node, NodeId, TypeConfig};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::utils::now_ms;
 use openraft::RPCTypes::{InstallSnapshot, Vote};
 use openraft::alias::VoteOf;
 use openraft::error::{RPCError, ReplicationClosed, StreamingError, Timeout, Unreachable};
@@ -14,6 +15,7 @@ use openraft::raft::{
 use openraft::{OptionalSend, RaftNetworkFactory, RaftNetworkV2, Snapshot};
 use parking_lot::RwLock;
 use tokio::time::sleep;
+use tracing::info;
 
 pub struct NetworkFactory {}
 impl RaftNetworkFactory<TypeConfig> for NetworkFactory {
@@ -27,26 +29,26 @@ impl RaftNetworkFactory<TypeConfig> for NetworkFactory {
                 _ = arc_nodes.write().insert(client);
             }
             Err(_) => {
-                tracing::info!("connect to node {} failed, start retrying", addr);
-                tokio::spawn(async move {
-                    loop {
-                        sleep(Duration::from_secs(2)).await;
-                        match RpcMultiClient::connect(&addr).await {
-                            Ok(client) => {
-                                tracing::info!("reconnect to {} success", addr);
-                                _ = arc_nodes.write().insert(client);
-                                break; // 成功后退出循环
-                            }
-                            Err(_) => {
-                                tracing::debug!("retry connect to {} failed", addr);
-                            }
-                        }
-                    }
-                });
+                info!("connect to node {} failed, start retrying", addr);
+                // tokio::spawn(async move {
+                //     loop {
+                //         sleep(Duration::from_secs(2)).await;
+                //         match RpcMultiClient::connect(&addr).await {
+                //             Ok(client) => {
+                //                 tracing::info!("reconnect to {} success", addr);
+                //                 _ = arc_nodes.write().insert(client);
+                //                 break; // 成功后退出循环
+                //             }
+                //             Err(_) => {
+                //                 tracing::debug!("retry connect to {} failed", addr);
+                //             }
+                //         }
+                //     }
+                // });
             }
         };
         TcpNetwork {
-            nodes: nodes,
+            nodes,
             target,
             node_id: node.node_id,
         }
@@ -115,7 +117,8 @@ impl RaftNetworkV2<TypeConfig> for TcpNetwork {
                 Some(client) => client.clone(),
             }
         };
-        client
+        let i = now_ms();
+        let result = client
             .call_with_timeout(
                 6,
                 req,
@@ -127,7 +130,9 @@ impl RaftNetworkV2<TypeConfig> for TcpNetwork {
                     id: self.node_id,
                 },
             )
-            .await
+            .await;
+        info!("调用方消耗时间{}", now_ms() - i);
+        result
     }
     // 只是一个标识，并不真正进行快照
     async fn full_snapshot(

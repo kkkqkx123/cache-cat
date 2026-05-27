@@ -24,7 +24,7 @@ impl SubCommand for SentinelSlavesCommand {
             _ => return Err(ProtocolError::InvalidArgument("master name").into()),
         };
         if server.app.config.sentinel_master_name != name {
-            return Ok(Value::BulkString(None));
+            return Ok(Value::Array(None));
         }
         let slaves = server.app.cluster.last_slave();
         let current_node_id = server.app.config.node_id;

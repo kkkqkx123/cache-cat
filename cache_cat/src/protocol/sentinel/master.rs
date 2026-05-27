@@ -26,6 +26,7 @@ impl SubCommand for SentinelMastersCommand {
             }
             Some(endpoint) => endpoint,
         };
+        let nodes_num = server.app.cluster.nodes().len();
 
         let mut result = Vec::new();
         let mut master_info = Vec::new();
@@ -38,8 +39,17 @@ impl SubCommand for SentinelMastersCommand {
             endpoint.redis_port().to_string().into_bytes(),
         )));
         master_info.push(Value::BulkString(Some(b"flags".to_vec())));
-        master_info.push(Value::BulkString(Some(flags.to_string().into_bytes())));
+        master_info.push(Value::BulkString(Some(flags.to_string().as_bytes().to_vec())));
+
+        master_info.push(Value::BulkString(Some(b"num-other-sentinels".to_vec())));
+        master_info.push(Value::BulkString(Some(
+            nodes_num.to_string().as_bytes().to_vec(),
+        )));
+
         result.push(Value::Array(Some(master_info)));
+
+
+
         Ok(Value::Array(Some(result)))
     }
 }
