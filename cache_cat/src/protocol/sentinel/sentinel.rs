@@ -1,12 +1,13 @@
 use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
-use crate::protocol::sentinel::master::SentinelMastersCommand;
+use crate::protocol::sentinel::get_master_addr::SentinelGetMasterAddrByNameCommand;
+use crate::protocol::sentinel::masters::SentinelMastersCommand;
+use crate::protocol::sentinel::slaves::SentinelSlavesCommand;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use crate::protocol::sentinel::get_master_addr::SentinelGetMasterAddrByNameCommand;
-use crate::protocol::sentinel::slaves::SentinelSlavesCommand;
+use crate::protocol::sentinel::sentinels::SentinelSentinelsCommand;
 
 /// Command trait for sub-command registration
 #[async_trait]
@@ -34,9 +35,9 @@ impl SentinelCommand {
             Box::new(SentinelGetMasterAddrByNameCommand),
         );
         sub_commands.insert("SLAVES".to_string(), Box::new(SentinelSlavesCommand));
+        sub_commands.insert("SENTINELS".to_string(), Box::new(SentinelSentinelsCommand));
         // sub_commands.insert("MASTER".to_string(), Box::new(SentinelMasterCommand));
         // sub_commands.insert("REPLICAS".to_string(), Box::new(SentinelReplicasCommand));
-        // sub_commands.insert("SENTINELS".to_string(), Box::new(SentinelSentinelsCommand));
         // sub_commands.insert("RESET".to_string(), Box::new(SentinelResetCommand));
         // sub_commands.insert("FAILOVER".to_string(), Box::new(SentinelFailoverCommand));
         // sub_commands.insert("MONITOR".to_string(), Box::new(SentinelMonitorCommand));

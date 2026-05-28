@@ -1,6 +1,6 @@
 use crate::config::config::Config;
 use crate::error::Result;
-use crate::node::node::RaftNode;
+use crate::node::raft_node::RaftNode;
 use crate::node::parsed_config::ParsedConfig;
 use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::request::{Operation, Request};
