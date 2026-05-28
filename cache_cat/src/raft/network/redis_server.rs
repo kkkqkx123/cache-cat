@@ -51,7 +51,7 @@ impl RedisServer {
         redis_addr: String,
     ) -> Self {
         let cmd_factory = Arc::new(CommandFactory::init());
-        let broadcast = app.broadcast.clone();
+        let broadcast = app.pubsub.clone();
         Self {
             app,
             redis_addr,

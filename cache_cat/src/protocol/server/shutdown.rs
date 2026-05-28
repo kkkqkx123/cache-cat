@@ -80,9 +80,7 @@ impl Command for ShutdownCommand {
             Ok(p) => p,
             Err(e) => return Err(e.into()),
         };
-
-        // TODO: Implement actual shutdown logic based on params.option
-
+        server.app.shutdown().await;
         // Return OK response
         Ok(Value::SimpleString("OK".to_string()))
     }

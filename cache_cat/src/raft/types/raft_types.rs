@@ -20,6 +20,7 @@ use std::fmt::Result as FmtResult;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
 
 pub type SnapshotData = tokio::fs::File;
 
@@ -55,10 +56,14 @@ pub struct CacheCatApp {
     pub state_machine: StateMachineStore,
     pub path: PathBuf,
     pub connector: Connector,
-    pub broadcast: Arc<PubSub>,
+    pub pubsub: Arc<PubSub>,
+    pub shutdown_tx: broadcast::Sender<()>,
 }
 
 impl CacheCatApp {
+    pub async fn shutdown(&self) {
+        _ = self.shutdown_tx.send(());
+    }
     pub async fn leader_rpc_call<Req, Res>(
         &self,
         func_id: u32,

@@ -7,18 +7,19 @@ use crate::raft::types::entry::request::{Operation, Request};
 use crate::utils::times::time_gap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast::Receiver;
 use tokio::time;
 use tracing::info;
 
 pub struct RaftNodeBuilder;
 
 impl RaftNodeBuilder {
-    pub async fn build(config: &Config) -> Result<Arc<RaftNode>> {
+    pub async fn build(config: &Config) -> Result<(Arc<RaftNode>, Receiver<()>)> {
         config.validate()?;
         let config = ParsedConfig::from(config)?;
         let duration = 1;
 
-        let raft_node = RaftNode::create(config).await?;
+        let (raft_node, shutdown_rx) = RaftNode::create(config).await?;
         let arc = Arc::new(raft_node);
 
         RaftNode::start(arc.clone()).await?;
@@ -63,6 +64,6 @@ impl RaftNodeBuilder {
             }
         });
 
-        Ok(arc) // 直接返回，无需再 clone
+        Ok((arc, shutdown_rx))
     }
 }
