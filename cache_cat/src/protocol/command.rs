@@ -3,6 +3,7 @@ use crate::error::ProtocolError;
 use crate::protocol::bitmap::getbit::GetBitCommand;
 use crate::protocol::bitmap::setbit::SetBitCommand;
 use crate::protocol::connection::auth::AuthCommand;
+use crate::protocol::connection::client::client::ClientCommand;
 use crate::protocol::connection::echo::EchoCommand;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::connection::quit::QuitCommand;
@@ -88,6 +89,17 @@ pub trait BlockCommand: Send + Sync {
     ) -> Result<Value, CacheCatError>;
 }
 
+/// Command trait for sub-command registration
+#[async_trait]
+pub trait SubCommand: Send + Sync {
+    async fn execute(
+        &self,
+        client: &mut Client,
+        items: &[Value],
+        server: &RedisServer,
+    ) -> Result<Value, CacheCatError>;
+}
+
 #[derive(Debug)]
 pub struct Client {
     pub id: u64,
@@ -138,6 +150,7 @@ impl CommandFactory {
         factory.register("SELECT", SelectCommand);
         factory.register("QUIT", QuitCommand);
         factory.register("AUTH", AuthCommand);
+        factory.register("CLIENT", ClientCommand::new());
         // Register data commands
         factory.register("GET", GetCommand);
         factory.register("SET", SetCommand);
