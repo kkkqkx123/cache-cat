@@ -16,7 +16,6 @@
 use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{BlockCommand, Client, ParsedCommand};
 use crate::protocol::connection::ping::PingParam;
-use crate::protocol::pub_sub::unsubscribe::UnsubscribeParams;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;

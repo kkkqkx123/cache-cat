@@ -2,6 +2,7 @@ use crate::error::CacheCatError;
 use crate::error::ProtocolError;
 use crate::protocol::bitmap::getbit::GetBitCommand;
 use crate::protocol::bitmap::setbit::SetBitCommand;
+use crate::protocol::connection::auth::AuthCommand;
 use crate::protocol::connection::echo::EchoCommand;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::connection::quit::QuitCommand;
@@ -30,6 +31,7 @@ use crate::protocol::pub_sub::unsubscribe::UnsubscribeCommand;
 use crate::protocol::sentinel::sentinel::SentinelCommand;
 use crate::protocol::server::bgsave::BgsaveCommand;
 use crate::protocol::server::save::SaveCommand;
+use crate::protocol::server::shutdown::ShutdownCommand;
 use crate::protocol::server::time::TimeCommand;
 use crate::protocol::set::sadd::SAddCommand;
 use crate::protocol::set::smembers::SMembersCommand;
@@ -56,7 +58,6 @@ use std::collections::HashMap;
 use tokio::select;
 use tokio::sync::watch;
 use tracing::{error, warn};
-use crate::protocol::server::shutdown::ShutdownCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -93,6 +94,7 @@ pub struct Client {
     pub db_number: u16,
     pub transaction_queue: Option<Vec<Operation>>,
     pub closed: bool,
+    pub authenticated: bool,
 }
 
 /// Parsed command information
@@ -135,6 +137,7 @@ impl CommandFactory {
         factory.register("TIME", TimeCommand);
         factory.register("SELECT", SelectCommand);
         factory.register("QUIT", QuitCommand);
+        factory.register("AUTH", AuthCommand);
         // Register data commands
         factory.register("GET", GetCommand);
         factory.register("SET", SetCommand);
@@ -189,7 +192,6 @@ impl CommandFactory {
         //Sentinel
         factory.register("SENTINEL", SentinelCommand::new());
 
-
         factory
     }
 
@@ -212,22 +214,6 @@ impl CommandFactory {
                 })
             }
             _ => Err(ProtocolError::InvalidFormat("expected array".to_string())),
-        }
-    }
-
-    /// Execute a regular command and return its response (without sending)
-    async fn execute_regular_command(
-        &self,
-        cmd_name: &str,
-        client: &mut Client,
-        items: &[Value],
-        server: &RedisServer,
-    ) -> Result<Value, CacheCatError> {
-        match self.commands.get(cmd_name) {
-            Some(cmd) => cmd.execute(client, items, server).await,
-            None => Err(CacheCatError::from(ProtocolError::UnknownCommand(
-                cmd_name.to_string(),
-            ))),
         }
     }
 
@@ -377,12 +363,17 @@ impl CommandFactory {
             }
         };
 
-        // Try regular command first
-        if self.commands.contains_key(&parsed.name) {
-            let resp = match self
-                .execute_regular_command(&parsed.name, client, &parsed.items, server)
-                .await
-            {
+        if !client.authenticated {
+            if parsed.name != "AUTH" && parsed.name != "QUIT" {
+                transport
+                    .send(Value::from(ProtocolError::NotAuthenticated))
+                    .await?;
+                return Ok(());
+            }
+        }
+
+        if let Some(cmd) = self.commands.get(&parsed.name) {
+            let resp = match cmd.execute(client, &parsed.items, server).await {
                 Ok(v) => v,
                 Err(e) => {
                     warn!("Command '{}' error: {}", parsed.name, e);

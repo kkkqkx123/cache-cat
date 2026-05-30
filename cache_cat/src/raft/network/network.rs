@@ -50,11 +50,6 @@ impl TcpNetwork {
             }
         }
 
-        // 如果不存在，尝试连接
-        info!(
-            "Attempting to connect to node {} at {}",
-            self.target, self.addr
-        );
         match RpcMultiClient::connect(&self.addr).await {
             Ok(client) => {
                 let mut guard = self.nodes.write();

@@ -46,10 +46,7 @@ impl Encoder<Value> for RespCodec {
 }
 
 impl RedisServer {
-    pub fn new(
-        app: Arc<CacheCatApp>,
-        redis_addr: String,
-    ) -> Self {
+    pub fn new(app: Arc<CacheCatApp>, redis_addr: String) -> Self {
         let cmd_factory = Arc::new(CommandFactory::init());
         let broadcast = app.pubsub.clone();
         Self {
@@ -73,6 +70,7 @@ impl RedisServer {
             transaction_queue: None,
             id: client_id,
             closed: false,
+            authenticated: self.app.config.password.is_none(),
         };
         self.cmd_factory
             .process_connection(&self, &mut framed, client)
