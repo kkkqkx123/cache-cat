@@ -2,13 +2,12 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command, SubCommand};
 use crate::protocol::sentinel::get_master_addr::SentinelGetMasterAddrByNameCommand;
 use crate::protocol::sentinel::masters::SentinelMastersCommand;
+use crate::protocol::sentinel::sentinels::SentinelSentinelsCommand;
 use crate::protocol::sentinel::slaves::SentinelSlavesCommand;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use crate::protocol::sentinel::sentinels::SentinelSentinelsCommand;
-
 
 /// Sentinel command handler
 pub struct SentinelCommand {

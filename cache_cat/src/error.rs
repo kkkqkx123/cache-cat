@@ -220,9 +220,7 @@ pub enum ProtocolError {
     #[error("{0}")]
     Custom(&'static str),
 
-    #[error(
-        "ERR ERR Client sent AUTH, but no password is set"
-    )]
+    #[error("ERR Client sent AUTH, but no password is set")]
     NotAuthenticated,
 }
 

@@ -1,7 +1,6 @@
 use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command, SubCommand};
 use crate::protocol::connection::client::info::ClientInfoCommand;
-use crate::protocol::sentinel::masters::SentinelMastersCommand;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
