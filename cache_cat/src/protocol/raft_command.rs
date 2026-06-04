@@ -31,6 +31,7 @@ use crate::raft::types::entry::request::Operation;
 use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
+use crate::protocol::list::lpop::LPopCommand;
 
 pub trait RaftCommand: Send + Sync {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError>;
@@ -92,6 +93,7 @@ impl RaftCommandFactory {
         factory.register("SREM", SRemCommand);
         factory.register("SETBIT", SetBitCommand);
         factory.register("GETBIT", GetBitCommand);
+        factory.register("LPOP", LPopCommand);
         factory
     }
 

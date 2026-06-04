@@ -60,6 +60,7 @@ use futures::{Sink, SinkExt, Stream};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use clap::builder::Str;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio::sync::watch;
@@ -118,6 +119,8 @@ pub struct Client {
     pub last_interaction: u64,
     pub flag: ClientFlag,
     pub last_cmd: String,
+    pub lib_name:String,
+    pub lib_ver:String,
 }
 
 impl Client {
@@ -134,6 +137,8 @@ impl Client {
             last_interaction: now_ms(),
             flag: ClientFlag::new(),
             last_cmd: "".to_string(),
+            lib_name: "".to_string(),
+            lib_ver: "".to_string(),
         }
     }
 }
