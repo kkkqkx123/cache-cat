@@ -91,3 +91,6 @@ r.set("my_key","1111")
 result = r.setnx("my_key", 'my_value')
 
 print(r.get("my_key"))
+
+r.renamenx("my_key", "my_key2")
+print(r.get("my_key2"))

@@ -18,6 +18,7 @@ use crate::protocol::key::exists::ExistsCommand;
 use crate::protocol::key::expire::ExpireCommand;
 use crate::protocol::key::persist::PersistCommand;
 use crate::protocol::key::rename::RenameCommand;
+use crate::protocol::key::renamenx::RenameNxCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::list::lrange::LRangeCommand;
 use crate::protocol::lua::eval::EvalCommand;
@@ -237,6 +238,7 @@ impl CommandFactory {
         factory.register("EXISTS", ExistsCommand);
         factory.register("PERSIST", PersistCommand);
         factory.register("RENAME", RenameCommand);
+        factory.register("RENAMENX", RenameNxCommand);
         factory.register("PSETEX", PSetExCommand);
         factory.register("SETEX", SetExCommand);
         factory.register("SETNX", SetNxCommand);
