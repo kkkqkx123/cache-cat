@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
 use crate::protocol::hash::hgetall::HGetAllCommand;
+use crate::protocol::hash::hkeys::HKeysCommand;
 use crate::protocol::string::len::StrLenCommand;
 
 pub trait RaftCommand: Send + Sync {
@@ -88,6 +89,7 @@ impl RaftCommandFactory {
         factory.register("HSET", HSetCommand);
         factory.register("HGET", HGetCommand);
         factory.register("HGETALL", HGetAllCommand);
+        factory.register("HKEYS", HKeysCommand);
         factory.register("ZADD", ZAddCommand);
         factory.register("ZRANGE", ZRangeCommand);
         factory.register("ZRANGEBYSCORE", ZRangeByScoreCommand);

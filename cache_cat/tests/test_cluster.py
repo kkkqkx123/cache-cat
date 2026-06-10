@@ -1,5 +1,3 @@
-from time import sleep
-
 import redis
 
 r = redis.Redis(
@@ -101,5 +99,6 @@ print(r.strlen("my_key2"))
 
 r.hset('test2', 'test', 'test')
 r.hset('test2', 'test2', 'test2')
-print(r.hgetall('test2'))
+print(r.hgetall('test3'))
 
+print(r.hkeys('test3'))

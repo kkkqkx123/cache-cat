@@ -73,6 +73,7 @@ use tokio::select;
 use tokio::sync::watch;
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
+use crate::protocol::hash::hkeys::{HKeysCommand, HKeysParams};
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -255,6 +256,7 @@ impl CommandFactory {
         factory.register("HMGET", HMGetCommand);
         factory.register("HDEL", HDelCommand);
         factory.register("HGETALL", HGetAllCommand);
+        factory.register("HKEYS", HKeysCommand);
         // Set commands
         factory.register("SADD", SAddCommand);
         factory.register("SMEMBERS", SMembersCommand);

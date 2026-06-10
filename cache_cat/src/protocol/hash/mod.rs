@@ -4,3 +4,4 @@ pub mod hincrby;
 pub mod hmget;
 pub mod hset;
 pub mod hgetall;
+pub mod hkeys;
