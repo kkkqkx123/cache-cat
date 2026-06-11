@@ -2,9 +2,12 @@ use crate::error::ProtocolError;
 use crate::protocol::bitmap::getbit::GetBitCommand;
 use crate::protocol::bitmap::setbit::SetBitCommand;
 use crate::protocol::hash::hget::HGetCommand;
+use crate::protocol::hash::hgetall::HGetAllCommand;
 use crate::protocol::hash::hincrby::HIncrByCommand;
+use crate::protocol::hash::hkeys::HKeysCommand;
 use crate::protocol::hash::hmget::HMGetCommand;
 use crate::protocol::hash::hset::HSetCommand;
+use crate::protocol::hash::hvals::HValsCommand;
 use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::exists::ExistsCommand;
 use crate::protocol::key::expire::ExpireCommand;
@@ -23,6 +26,7 @@ use crate::protocol::string::append::AppendCommand;
 use crate::protocol::string::get::GetCommand;
 use crate::protocol::string::incr::IncrCommand;
 use crate::protocol::string::incrby::IncrByCommand;
+use crate::protocol::string::len::StrLenCommand;
 use crate::protocol::string::mget::MgetCommand;
 use crate::protocol::string::mset::MsetCommand;
 use crate::protocol::string::psetex::PSetExCommand;
@@ -37,9 +41,6 @@ use crate::raft::types::entry::request::Operation;
 use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
-use crate::protocol::hash::hgetall::HGetAllCommand;
-use crate::protocol::hash::hkeys::HKeysCommand;
-use crate::protocol::string::len::StrLenCommand;
 
 pub trait RaftCommand: Send + Sync {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError>;
@@ -110,6 +111,7 @@ impl RaftCommandFactory {
         factory.register("SETEX", SetExCommand);
         factory.register("SETNX", SetNxCommand);
         factory.register("STRLEN", StrLenCommand);
+        factory.register("HVALS", HValsCommand);
         factory
     }
 

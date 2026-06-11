@@ -12,6 +12,7 @@ use crate::protocol::hash::hdel::HDelCommand;
 use crate::protocol::hash::hget::HGetCommand;
 use crate::protocol::hash::hgetall::HGetAllCommand;
 use crate::protocol::hash::hincrby::HIncrByCommand;
+use crate::protocol::hash::hkeys::HKeysCommand;
 use crate::protocol::hash::hmget::HMGetCommand;
 use crate::protocol::hash::hset::HSetCommand;
 use crate::protocol::key::del::DelCommand;
@@ -60,20 +61,18 @@ use crate::raft::network::redis_server::{RedisServer, RespCodec};
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::Operation;
 use crate::utils::now_ms;
-use crate::utils::times::now_us;
 use async_trait::async_trait;
-use clap::builder::Str;
 use futures::StreamExt;
-use futures::{Sink, SinkExt, Stream};
+use futures::{SinkExt, Stream};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::watch;
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
-use crate::protocol::hash::hkeys::{HKeysCommand, HKeysParams};
+use crate::protocol::hash::hvals::HValsCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -257,6 +256,8 @@ impl CommandFactory {
         factory.register("HDEL", HDelCommand);
         factory.register("HGETALL", HGetAllCommand);
         factory.register("HKEYS", HKeysCommand);
+        factory.register("HVALS", HValsCommand);
+
         // Set commands
         factory.register("SADD", SAddCommand);
         factory.register("SMEMBERS", SMembersCommand);

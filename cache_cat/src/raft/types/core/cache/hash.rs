@@ -4,6 +4,7 @@ use crate::protocol::hash::hget::HGetParams;
 use crate::protocol::hash::hgetall::HGetAllParams;
 use crate::protocol::hash::hkeys::HKeysParams;
 use crate::protocol::hash::hmget::HMGetParams;
+use crate::protocol::hash::hvals::HValsParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
 use crate::raft::types::core::response_value::Value;
@@ -243,6 +244,36 @@ impl MyCache {
             },
         }
     }
+
+    pub fn h_vals(&self, param: HValsParams, db_number: u16) -> Value {
+        let cache = match self.get_cache(db_number) {
+            Err(err) => return err,
+            Ok(cache) => cache,
+        };
+        match cache.get(&param.key) {
+            None => Value::Array(Some(vec![])),
+            Some(v) => match v.data {
+                ValueObject::Hash(map) => {
+                    let guard = map.lock();
+
+                    let mut result = Vec::with_capacity(guard.len());
+
+                    for value in guard.values() {
+                        let value_bytes = match value {
+                            HashValue::Str(str) => str.as_ref().clone(),
+                            HashValue::Int(int) => int.to_string().into_bytes(),
+                        };
+
+                        result.push(Value::BulkString(Some(value_bytes)));
+                    }
+
+                    Value::Array(Some(result))
+                }
+                _ => CacheCatError::from(ProtocolError::WrongType).into(),
+            },
+        }
+    }
+
     pub fn h_get_all(&self, param: HGetAllParams, db_number: u16) -> Value {
         let cache = match self.get_cache(db_number) {
             Err(err) => return err,
@@ -266,7 +297,7 @@ impl MyCache {
                         result.push(Value::BulkString(Some(value_bytes)));
                     }
 
-                    (Value::Array(Some(result)))
+                    Value::Array(Some(result))
                 }
                 _ => CacheCatError::from(ProtocolError::WrongType).into(),
             },

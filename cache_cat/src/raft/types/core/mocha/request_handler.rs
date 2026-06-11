@@ -28,6 +28,7 @@ pub fn do_request(
             ReadOperation::StrLen(param) => my_cache.str_len(param, update.db_number),
             ReadOperation::HGetAll(param) => my_cache.h_get_all(param, update.db_number),
             ReadOperation::HKeys(param) => my_cache.h_keys(param, update.db_number),
+            ReadOperation::HVals(param) => my_cache.h_vals(param, update.db_number),
         },
         Operation::Base(base) => match base {
             BaseOperation::Empty => {
