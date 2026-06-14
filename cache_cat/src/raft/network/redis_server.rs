@@ -19,7 +19,21 @@ pub struct RedisServer {
     pub broadcast: Arc<PubSub>,
 }
 
-pub struct RespCodec;
+pub struct RespCodec {
+    proto_version: u8,
+}
+
+impl RespCodec {
+    pub fn new() -> Self {
+        Self { proto_version: 2 }
+    }
+    pub fn switch_resp2(&mut self){
+        self.proto_version = 2;
+    }
+    pub fn switch_resp3(&mut self){
+        self.proto_version = 3;
+    }
+}
 
 impl Decoder for RespCodec {
     type Item = Value;
@@ -40,7 +54,9 @@ impl Encoder<Value> for RespCodec {
     type Error = std::io::Error;
 
     fn encode(&mut self, item: Value, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.extend_from_slice(&item.encode());
+        let mut buf = Vec::new();
+        item.encode_to(self.proto_version, &mut buf);
+        dst.extend_from_slice(&buf);
         Ok(())
     }
 }
@@ -64,7 +80,7 @@ impl RedisServer {
         client_id: u64,
     ) -> Result<(), CacheCatError> {
         stream.set_nodelay(true)?;
-        let framed = Framed::new(stream, RespCodec);
+        let framed = Framed::new(stream, RespCodec::new());
         let auth = self.app.config.password.is_none();
         let client = Client::new(client_id, framed, auth);
         self.cmd_factory.process_connection(&self, client).await?;

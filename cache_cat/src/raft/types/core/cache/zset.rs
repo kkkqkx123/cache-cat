@@ -91,17 +91,44 @@ impl MyCache {
             Ok(cache) => cache,
         };
         match cache.get(&params.key) {
-            None => Value::BulkString(None),
+            None => Value::Array(Some(vec![])),  // 空集合返回空数组
             Some(v) => match v.data {
                 ZSet(list) => {
                     let res = list
                         .lock()
                         .zrange(params.start, params.stop, params.with_scores);
-                    let mut vec = Vec::new();
-                    for v in res {
-                        vec.push(Value::BulkString(Some(v)))
+
+                    if params.with_scores {
+                        // 使用 Pairs 类型
+                        let mut pairs = Vec::with_capacity(res.len() / 2);
+                        let mut iter = res.into_iter();
+                        while let Some(member) = iter.next() {
+                            if let Some(score_bytes) = iter.next() {
+                                let score = String::from_utf8_lossy(&score_bytes);
+                                // 尝试解析为数字
+                                let score_value = if let Ok(num) = score.parse::<i64>() {
+                                    Value::Integer(num)
+                                } else if let Ok(num) = score.parse::<f64>() {
+                                    Value::BulkString(Some(score_bytes))
+                                } else {
+                                    Value::BulkString(Some(score_bytes))
+                                };
+
+                                pairs.push((
+                                    Value::BulkString(Some(member)),
+                                    score_value,
+                                ));
+                            }
+                        }
+                        Value::Pairs(pairs)
+                    } else {
+                        // 只有成员，返回普通数组
+                        let mut vec = Vec::with_capacity(res.len());
+                        for member in res {
+                            vec.push(Value::BulkString(Some(member)));
+                        }
+                        Value::Array(Some(vec))
                     }
-                    Value::Array(Some(vec))
                 }
                 _ => ProtocolError::WrongType.into(),
             },

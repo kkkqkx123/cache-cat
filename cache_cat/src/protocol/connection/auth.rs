@@ -18,7 +18,7 @@ impl Command for AuthCommand {
         server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
         if items.len() != 2 {
-            return Err(ProtocolError::WrongArgCount("auth").into());
+            return Err(ProtocolError::WrongArgCount("AUTH").into());
         }
 
         let password = match &items[1] {

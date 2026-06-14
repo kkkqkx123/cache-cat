@@ -5,6 +5,7 @@ use crate::protocol::bitmap::setbit::SetBitCommand;
 use crate::protocol::connection::auth::AuthCommand;
 use crate::protocol::connection::client::client::ClientCommand;
 use crate::protocol::connection::echo::EchoCommand;
+use crate::protocol::connection::hello::HelloCommand;
 use crate::protocol::connection::ping::PingCommand;
 use crate::protocol::connection::quit::QuitCommand;
 use crate::protocol::connection::select::SelectCommand;
@@ -64,8 +65,8 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::Operation;
 use crate::utils::now_ms;
 use async_trait::async_trait;
-use futures::StreamExt;
 use futures::SinkExt;
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -228,6 +229,7 @@ impl CommandFactory {
         factory.register("QUIT", QuitCommand);
         factory.register("AUTH", AuthCommand);
         factory.register("CLIENT", ClientCommand::new());
+        factory.register("HELLO", HelloCommand);
         // Register data commands
         factory.register("GET", GetCommand);
         factory.register("SET", SetCommand);

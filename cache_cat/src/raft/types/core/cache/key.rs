@@ -48,19 +48,19 @@ impl ComputeCommand for ExpireReq {
             },
         };
         if !should_update {
-            return (MochaOperation::Abort, Value::Integer(0));
+            return (MochaOperation::Abort, Value::Boolean(false));
         }
         (
             MochaOperation::Insert {
                 value: entry.value.clone(),
                 expire: ExpirePolicy::Absolute(expires_at),
             },
-            Value::Integer(1),
+            Value::Boolean(true),
         )
     }
 
     fn init(self) -> (MochaOperation<MyValue>, Value) {
-        (MochaOperation::Abort, Value::Integer(0))
+        (MochaOperation::Abort, Value::Boolean(false))
     }
 }
 impl ComputeCommand for PersistReq {
@@ -78,19 +78,19 @@ impl ComputeCommand for PersistReq {
         _write_clock: u64,
     ) -> (MochaOperation<MyValue>, Value) {
         if entry.expire_at.is_none() {
-            return (MochaOperation::Abort, Value::Integer(0));
+            return (MochaOperation::Abort, Value::Boolean(false));
         }
         (
             MochaOperation::Insert {
                 value: entry.value.clone(),
                 expire: ExpirePolicy::Persistent,
             },
-            Value::Integer(1),
+            Value::Boolean(true),
         )
     }
 
     fn init(self) -> (MochaOperation<MyValue>, Value) {
-        (MochaOperation::Abort, Value::Integer(0))
+        (MochaOperation::Abort, Value::Boolean(false))
     }
 }
 

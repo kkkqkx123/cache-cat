@@ -60,7 +60,7 @@ pub fn do_request(
     my_cache: &MyCache,
     operation: Operation,
     update: &mut Update,
-    external: bool,
+    external: bool, //用来防止多次加锁
 ) -> Value {
     match operation {
         Operation::Read(read) => read_request(my_cache, read, update.db_number),

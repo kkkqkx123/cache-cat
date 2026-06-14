@@ -280,24 +280,22 @@ impl MyCache {
             Ok(cache) => cache,
         };
         match cache.get(&param.key) {
-            None => Value::Array(Some(vec![])) ,
+            None => Value::Map(Vec::new()),  // 空 Map
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
-                    let mut result = Vec::with_capacity(guard.len() * 2);
+                    let mut result = Vec::with_capacity(guard.len());
                     for (field, value) in guard.iter() {
-                        // field
-                        result.push(Value::BulkString(Some(field.as_ref().clone())));
-                        // value
                         let value_bytes = match value {
                             HashValue::Str(str) => str.as_ref().clone(),
                             HashValue::Int(int) => int.to_string().into_bytes(),
                         };
-
-                        result.push(Value::BulkString(Some(value_bytes)));
+                        result.push((
+                            Value::BulkString(Some(field.as_ref().clone())),
+                            Value::BulkString(Some(value_bytes)),
+                        ));
                     }
-
-                    Value::Array(Some(result))
+                    Value::Map(result)
                 }
                 _ => CacheCatError::from(ProtocolError::WrongType).into(),
             },
