@@ -21,6 +21,7 @@ pub enum BaseOperation {
     SetBit(SetBitReq),
     // list
     LPush(LPushReq),
+    RPush(RPushReq),
     LPop(LPopReq),
     //hash
     HSet(HSetReq),
@@ -32,6 +33,22 @@ pub enum BaseOperation {
     SAdd(SAddReq),
     SRem(SRemReq),
 }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RPushReq {
+    pub key: Arc<Vec<u8>>,
+    pub elements: Vec<Arc<Vec<u8>>>,
+}
+impl Display for RPushReq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "RPushReq {{ key: {}, elements: {:?} }}",
+            String::from_utf8_lossy(&self.key),
+            self.elements
+        )
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LPopReq {
@@ -72,7 +89,7 @@ pub struct SRemReq {
     pub key: Arc<Vec<u8>>,
     pub members: Vec<Arc<Vec<u8>>>,
 }
-impl fmt::Display for SRemReq {
+impl Display for SRemReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -87,7 +104,7 @@ pub struct HDelReq {
     pub key: Arc<Vec<u8>>,
     pub fields: Vec<Arc<Vec<u8>>>,
 }
-impl fmt::Display for HDelReq {
+impl Display for HDelReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -103,7 +120,7 @@ pub struct InsertReq {
     pub value: ValueObject,
     pub expires_at: u64,
 }
-impl fmt::Display for InsertReq {
+impl Display for InsertReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -259,7 +276,7 @@ pub struct SetReq {
     pub value: Arc<Vec<u8>>,
     pub ex_time: u64,
 }
-impl fmt::Display for SetReq {
+impl Display for SetReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -276,7 +293,7 @@ pub struct LPushReq {
     pub key: Arc<Vec<u8>>,
     pub elements: Vec<Arc<Vec<u8>>>,
 }
-impl fmt::Display for LPushReq {
+impl Display for LPushReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -291,7 +308,7 @@ impl fmt::Display for LPushReq {
 pub struct DelReq {
     pub key: Arc<Vec<u8>>,
 }
-impl fmt::Display for DelReq {
+impl Display for DelReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

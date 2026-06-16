@@ -19,6 +19,7 @@ use crate::protocol::list::llen::LLenCommand;
 use crate::protocol::list::lpop::LPopCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::list::lrange::LRangeCommand;
+use crate::protocol::list::rpush::RPushCommand;
 use crate::protocol::lua::eval::EvalCommand;
 use crate::protocol::set::sadd::SAddCommand;
 use crate::protocol::set::smembers::SMembersCommand;
@@ -127,6 +128,8 @@ impl RaftCommandFactory {
         factory.register("STRLEN", StrLenCommand);
         factory.register("HVALS", HValsCommand);
         factory.register("LLEN", LLenCommand);
+        factory.register("RPUSH", RPushCommand);
+
         factory
     }
 

@@ -76,6 +76,7 @@ use tokio::sync::watch;
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
 use crate::protocol::key::pexpire::PExpireCommand;
+use crate::protocol::list::rpush::RPushCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -252,6 +253,7 @@ impl CommandFactory {
         factory.register("STRLEN", StrLenCommand);
         // List commands
         factory.register("LPUSH", LPushCommand);
+        factory.register("RPUSH", RPushCommand);
         factory.register("LRANGE", LRangeCommand);
         factory.register("LLEN", LLenCommand);
         // Hash commands

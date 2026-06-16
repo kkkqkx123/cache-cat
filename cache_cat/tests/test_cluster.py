@@ -110,10 +110,6 @@ print(r.llen("list test1"))
 
 
 
-
-
-
-
 #
 r.set("test20", "test20")
 r.expire("test20", 1)
@@ -122,5 +118,7 @@ print(r.get("test20"))
 
 
 
-
+r.rpush("list test2", "test")
+print(r.rpush("list test2", "test2"))
+print(r.lrange("list test2", 0, -1))
 

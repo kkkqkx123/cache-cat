@@ -3,7 +3,6 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::{Operation, RedisOperation};
-use std::fs::read;
 
 pub fn read_request(
     my_cache: &MyCache,
@@ -60,6 +59,7 @@ pub fn base_request(
         BaseOperation::SRem(param) => my_cache.s_rem(param, update),
         BaseOperation::SetBit(param) => my_cache.set_bit(param, update),
         BaseOperation::LPop(param) => my_cache.l_pop(param, update),
+        BaseOperation::RPush(param) => my_cache.r_push(param, update),
     }
 }
 
