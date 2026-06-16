@@ -3,10 +3,12 @@ use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::bitmap::getbit::GetBitParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, SetBitReq};
 use std::sync::Arc;
+
 impl ComputeCommand for SetBitReq {
     fn key(&self) -> Arc<Vec<u8>> {
         self.key.clone()
@@ -101,13 +103,13 @@ impl ComputeCommand for SetBitReq {
     }
 }
 
-impl MyCache {
-    pub fn get_bit(&self, param: GetBitParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        let bytes: Vec<u8> = match cache.get_with_read_clock(&param.key,read_clock) {
+impl ReadCommand for GetBitParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        let bytes: Vec<u8> = match value {
             None => return Value::Integer(0),
             Some(value) => match value.data {
                 ValueObject::String(s) => s.to_vec(),
@@ -115,7 +117,7 @@ impl MyCache {
                 _ => return ProtocolError::WrongType.into(),
             },
         };
-        let offset = param.offset; // u64
+        let offset = self.offset; // u64
         let byte_index = (offset / 8) as usize;
         let bit_offset = (offset % 8) as usize;
         let bit = if byte_index >= bytes.len() {
@@ -125,6 +127,12 @@ impl MyCache {
             ((byte >> (7 - bit_offset)) & 1) as i64
         };
         Value::Integer(bit)
+    }
+}
+
+impl MyCache {
+    pub fn get_bit(&self, param: GetBitParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(param, db_number, read_clock)
     }
     pub fn set_bit(&self, param: SetBitReq, update: &mut Update) -> Value {
         self.execute_compute(param, update)

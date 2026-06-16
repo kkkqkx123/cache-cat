@@ -4,6 +4,7 @@ use crate::protocol::zset::zrange::ZRangeParams;
 use crate::protocol::zset::zrangegetscore::ZRangeByScoreParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::SortedSet;
 use crate::raft::types::core::value_object::ValueObject::ZSet;
@@ -56,24 +57,18 @@ impl ComputeCommand for ZAddReq {
     }
 }
 
-impl MyCache {
-    pub fn z_range_by_score(&self, params: ZRangeByScoreParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&params.key,read_clock) {
+impl ReadCommand for ZRangeByScoreParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Array(Some(vec![])),
             Some(v) => match v.data {
                 ZSet(list) => {
                     let zset = list.lock();
-                    let res = zset.zrangebyscore(
-                        params.min,
-                        params.max,
-                        params.with_scores,
-                        params.limit,
-                    );
-
+                    let res = zset.zrangebyscore(self.min, self.max, self.with_scores, self.limit);
                     let mut vec = Vec::with_capacity(res.len());
                     for v in res {
                         vec.push(Value::BulkString(Some(v)));
@@ -84,21 +79,20 @@ impl MyCache {
             },
         }
     }
+}
+impl ReadCommand for ZRangeParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
 
-    pub fn z_range(&self, params: ZRangeParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&params.key, read_clock) {
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Array(Some(vec![])), // 空集合返回空数组
             Some(v) => match v.data {
                 ZSet(list) => {
-                    let res = list
-                        .lock()
-                        .zrange(params.start, params.stop, params.with_scores);
+                    let res = list.lock().zrange(self.start, self.stop, self.with_scores);
 
-                    if params.with_scores {
+                    if self.with_scores {
                         // 使用 Pairs 类型
                         let mut pairs = Vec::with_capacity(res.len() / 2);
                         let mut iter = res.into_iter();
@@ -130,6 +124,21 @@ impl MyCache {
                 _ => ProtocolError::WrongType.into(),
             },
         }
+    }
+}
+
+impl MyCache {
+    pub fn z_range_by_score(
+        &self,
+        params: ZRangeByScoreParams,
+        db_number: u16,
+        read_clock: Option<u64>,
+    ) -> Value {
+        self.execute_read(params, db_number, read_clock)
+    }
+
+    pub fn z_range(&self, params: ZRangeParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(params, db_number, read_clock)
     }
     pub fn z_add(&self, zadd: ZAddReq, update: &mut Update) -> Value {
         self.execute_compute(zadd, update)

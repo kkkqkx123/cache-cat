@@ -8,6 +8,7 @@ use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::{Expiration, SetMode, SetParams};
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{AppendReq, BaseOperation, IncrReq, SetReq};
@@ -172,6 +173,42 @@ impl ComputeCommand for AppendReq {
     }
 }
 
+impl ReadCommand for GetParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
+            None => Value::BulkString(None),
+            Some(v) => match v.data {
+                ValueObject::Int(int_value) => {
+                    Value::BulkString(Some(int_value.to_string().into_bytes()))
+                }
+                ValueObject::String(str_value) => {
+                    Value::BulkString(Some(str_value.as_ref().clone()))
+                }
+                _ => ProtocolError::WrongType.into(),
+            },
+        }
+    }
+}
+impl ReadCommand for StrLenParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        let len = match value {
+            None => 0,
+            Some(v) => match v.data {
+                ValueObject::String(ref bytes) => bytes.len(),
+                ValueObject::Int(ref i) => i.to_string().len(),
+                _ => return ProtocolError::WrongType.into(),
+            },
+        };
+        Value::Integer(len as i64)
+    }
+}
+
 impl MyCache {
     pub fn redis_mset(&self, params: MsetParams, update: &mut Update<'_>, external: bool) -> Value {
         if external {
@@ -328,38 +365,11 @@ impl MyCache {
     }
 
     pub fn get(&self, param: GetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key, read_clock) {
-            None => Value::BulkString(None),
-            Some(v) => match v.data {
-                ValueObject::Int(int_value) => {
-                    Value::BulkString(Some(int_value.to_string().into_bytes()))
-                }
-                ValueObject::String(str_value) => {
-                    Value::BulkString(Some(str_value.as_ref().clone()))
-                }
-                _ => ProtocolError::WrongType.into(),
-            },
-        }
+        self.execute_read(param, db_number, read_clock)
     }
 
     pub fn str_len(&self, param: StrLenParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        let len = match cache.get_with_read_clock(&param.key, read_clock) {
-            None => 0,
-            Some(v) => match v.data {
-                ValueObject::String(ref bytes) => bytes.len(),
-                ValueObject::Int(ref i) => i.to_string().len(),
-                _ => return ProtocolError::WrongType.into(),
-            },
-        };
-        Value::Integer(len as i64)
+        self.execute_read(param, db_number, read_clock)
     }
 
     pub fn set(&self, param: SetReq, update: &mut Update) -> Value {

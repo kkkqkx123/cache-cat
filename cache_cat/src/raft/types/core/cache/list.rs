@@ -5,6 +5,7 @@ use crate::protocol::list::llen::LLenParams;
 use crate::protocol::list::lrange::LRangeParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, LPopReq, LPushReq, RPushReq};
@@ -163,17 +164,17 @@ impl ComputeCommand for LPopReq {
     }
 }
 
-impl MyCache {
-    pub fn l_range(&self, params: LRangeParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&params.key, read_clock) {
+impl ReadCommand for LRangeParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::BulkString(None),
             Some(v) => match v.data {
                 ValueObject::List(list) => {
-                    let vec = crate::utils::lrange(&list.lock(), params.start, params.stop);
+                    let vec = crate::utils::lrange(&list.lock(), self.start, self.stop);
                     let mut array = Vec::new();
                     for x in vec {
                         let value = Value::BulkString(Some(x.as_ref().clone()));
@@ -185,19 +186,30 @@ impl MyCache {
             },
         }
     }
-    pub fn l_len(&self, params: LLenParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
+}
 
-        match cache.get_with_read_clock(&params.key, read_clock) {
+impl ReadCommand for LLenParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Integer(0),
             Some(v) => match v.data {
                 ValueObject::List(list) => Value::Integer(list.lock().len() as i64),
                 _ => ProtocolError::WrongType.into(),
             },
         }
+    }
+}
+
+impl MyCache {
+    pub fn l_range(&self, params: LRangeParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(params, db_number, read_clock)
+    }
+    pub fn l_len(&self, params: LLenParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(params, db_number, read_clock)
     }
 
     pub fn r_push(&self, param: RPushReq, update: &mut Update) -> Value {

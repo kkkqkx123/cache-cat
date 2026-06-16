@@ -7,6 +7,7 @@ use crate::protocol::hash::hmget::HMGetParams;
 use crate::protocol::hash::hvals::HValsParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::{HashValue, ValueObject};
 use crate::raft::types::entry::bae_operation::{BaseOperation, HDelReq, HIncrReq, HSetReq};
@@ -191,18 +192,18 @@ impl ComputeCommand for HDelReq {
     }
 }
 
-impl MyCache {
-    pub fn h_m_get(&self, param: HMGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key, read_clock) {
+impl ReadCommand for HMGetParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::BulkString(None),
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
-                    let results: Vec<Value> = param
+                    let results: Vec<Value> = self
                         .fields
                         .iter()
                         .map(|field| match guard.get(field) {
@@ -223,13 +224,15 @@ impl MyCache {
             },
         }
     }
+}
 
-    pub fn h_keys(&self, param: HKeysParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key,read_clock) {
+impl ReadCommand for HKeysParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Array(Some(vec![])),
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
@@ -244,13 +247,14 @@ impl MyCache {
             },
         }
     }
+}
+impl ReadCommand for HValsParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
 
-    pub fn h_vals(&self, param: HValsParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key,read_clock) {
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Array(Some(vec![])),
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
@@ -273,14 +277,16 @@ impl MyCache {
             },
         }
     }
+}
 
-    pub fn h_get_all(&self, param: HGetAllParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key,read_clock) {
-            None => Value::Map(Vec::new()), // 空 Map
+impl ReadCommand for HGetAllParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
+            None => Value::Map(Vec::new()),
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
@@ -301,18 +307,20 @@ impl MyCache {
             },
         }
     }
+}
 
-    pub fn h_get(&self, param: HGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key,read_clock) {
+impl ReadCommand for HGetParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::BulkString(None),
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
-                    let option = guard.get(&param.field);
+                    let option = guard.get(&self.field);
                     match option {
                         None => Value::BulkString(None),
                         Some(value) => match value {
@@ -326,6 +334,32 @@ impl MyCache {
                 _ => ProtocolError::WrongType.into(),
             },
         }
+    }
+}
+impl MyCache {
+    pub fn h_m_get(&self, param: HMGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(param, db_number, read_clock)
+    }
+
+    pub fn h_keys(&self, param: HKeysParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(param, db_number, read_clock)
+    }
+
+    pub fn h_vals(&self, param: HValsParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(param, db_number, read_clock)
+    }
+
+    pub fn h_get_all(
+        &self,
+        param: HGetAllParams,
+        db_number: u16,
+        read_clock: Option<u64>,
+    ) -> Value {
+        self.execute_read(param, db_number, read_clock)
+    }
+
+    pub fn h_get(&self, param: HGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
+        self.execute_read(param, db_number, read_clock)
     }
     pub fn h_del(&self, param: HDelReq, update: &mut Update) -> Value {
         self.execute_compute(param, update)

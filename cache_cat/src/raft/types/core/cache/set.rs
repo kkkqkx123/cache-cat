@@ -3,6 +3,7 @@ use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::set::smembers::SMembersParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::bae_operation::{BaseOperation, SAddReq, SRemReq};
@@ -122,13 +123,13 @@ impl ComputeCommand for SAddReq {
     }
 }
 
-impl MyCache {
-    pub fn s_member(&self, param: SMembersParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        let cache = match self.get_cache(db_number) {
-            Err(err) => return err,
-            Ok(cache) => cache,
-        };
-        match cache.get_with_read_clock(&param.key,read_clock) {
+impl ReadCommand for SMembersParams {
+    fn key(&self) -> &Vec<u8> {
+        &self.key
+    }
+
+    fn execute(&self, value: Option<MyValue>) -> Value {
+        match value {
             None => Value::Array(Some(vec![])),
             Some(v) => match v.data {
                 ValueObject::Set(set) => {
@@ -142,6 +143,17 @@ impl MyCache {
                 _ => ProtocolError::WrongType.into(),
             },
         }
+    }
+}
+
+impl MyCache {
+    pub fn s_member(
+        &self,
+        param: SMembersParams,
+        db_number: u16,
+        read_clock: Option<u64>,
+    ) -> Value {
+        self.execute_read(param, db_number, read_clock)
     }
 
     pub fn s_rem(&self, param: SRemReq, update: &mut Update) -> Value {
