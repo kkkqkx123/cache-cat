@@ -100,7 +100,6 @@ pub fn do_request(
                 }
                 Value::Array(Some(vec))
             }
-            RedisOperation::RedisBLPop(req) => todo!(),
         },
     }
 }
