@@ -21,20 +21,16 @@ impl SetNxCommand {
             return Err(ProtocolError::WrongArgCount("setnx"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let value = match &items[2] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("value")),
-        };
+        let value = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("value"))?;
 
         Ok(SetParams {
-            key: key.into(),
+            key,
             value,
             mode: Some(SetMode::Nx),
             get: false,

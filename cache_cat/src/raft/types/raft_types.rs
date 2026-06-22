@@ -83,7 +83,8 @@ impl CacheCatApp {
             if node_id == self.cluster.node_id() {
                 continue;
             }
-            // 关键：将地址转为拥有所有权的 String，避免引用 node 造成生命周期问题
+            // Key: Convert the address to a String with ownership to
+            // avoid lifecycle issues caused by referencing nodes
             let addr = node.endpoint.raft_addr().to_owned();
             let req = req.clone();
             let timeout = Timeout {
@@ -92,9 +93,9 @@ impl CacheCatApp {
                 timeout: Duration::from_secs(2),
                 id: self.cluster.node_id(),
             };
-            // 构造一个 Future 但不立即 .await
+            // Construct a Future but not immediately .await
             let fut = self.connector.send_msg::<Req, Res>(
-                addr, // 现在可以安全 move 进入 Future
+                addr, // Now it is safe to move into the future
                 func_id,
                 req,
                 Duration::from_secs(2),
@@ -102,7 +103,7 @@ impl CacheCatApp {
             );
             futures.push(fut);
         }
-        // 并发执行所有请求，忽略结果
+        // Execute all requests concurrently, ignoring the results
         let _ = join_all(futures).await;
         Ok(())
     }

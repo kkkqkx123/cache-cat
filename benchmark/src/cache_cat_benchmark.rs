@@ -3,7 +3,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use crate::args::Args;
+use crate::common::{BenchmarkTarget, BenchmarkWorker, run_engine};
 use bytes::Bytes;
+use cache_cat::protocol::string::set::SetReq;
 use cache_cat::raft::network::client::RpcMultiClient;
 use cache_cat::raft::network::model::{GetReq, GetRes};
 use cache_cat::raft::network::pipeline_client::PipelineMultiClient;
@@ -11,9 +14,6 @@ use cache_cat::raft::types::entry::bae_operation::BaseOperation;
 use cache_cat::raft::types::entry::request::{Operation, Request};
 use cache_cat::raft::types::raft_types::TypeConfig;
 use openraft::raft::ClientWriteResponse;
-use cache_cat::protocol::string::set::SetReq;
-use crate::args::Args;
-use crate::common::{BenchmarkTarget, BenchmarkWorker, run_engine};
 
 #[derive(Clone)]
 struct CacheCatTarget {
@@ -74,7 +74,7 @@ impl BenchmarkWorker for CacheCatWorker {
                         Operation::Base(
                             (BaseOperation::Set(SetReq {
                                 key: Bytes::from_owner(format!("test{}", request_id)),
-                                value: Arc::from(format!("test_value_{}", request_id).into_bytes()),
+                                value: Bytes::from_owner(format!("test_value_{}", request_id)),
                                 ex_time: 0,
                             })),
                         ),

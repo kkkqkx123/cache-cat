@@ -7,16 +7,16 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::ValueObject;
 
 /// Parsed HKEYS arguments
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,7 @@ impl ReadCommand for HKeysParams {
                     let guard = map.lock();
                     let mut result = Vec::with_capacity(guard.len());
                     for (field, _) in guard.iter() {
-                        result.push(Value::BulkString(Some(field.as_ref().clone())));
+                        result.push(Value::BulkString(Some(field.clone())));
                     }
                     Value::Array(Some(result))
                 }
@@ -62,13 +62,11 @@ impl HKeysCommand {
             return Err(ProtocolError::WrongArgCount("hkeys"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(HKeysParams { key: key.into() })
+        Ok(HKeysParams { key })
     }
 }
 

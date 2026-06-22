@@ -2,15 +2,15 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::{RaftCommand, ReadRaftCommand};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::ValueObject;
 
 pub struct LRangeCommand;
 
@@ -44,11 +44,11 @@ impl ReadCommand for LRangeParams {
             Some(v) => match v.data {
                 ValueObject::List(list) => {
                     let vec = crate::utils::lrange(&list.lock(), self.start, self.stop);
-                    let mut array = Vec::new();
-                    for x in vec {
-                        let value = Value::BulkString(Some(x.as_ref().clone()));
-                        array.push(value);
-                    }
+                    let array = vec
+                        .into_iter()
+                        .map(|v| Value::BulkString(Some(v)))
+                        .collect::<Vec<_>>();
+
                     Value::Array(Some(array))
                 }
                 _ => ProtocolError::WrongType.into(),
@@ -63,32 +63,14 @@ impl LRangeCommand {
             return Err(ProtocolError::WrongArgCount("lrange"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let start = parse_i64(&items[2])?;
-        let stop = parse_i64(&items[3])?;
+        let start = items[2].try_parse_i64()?;
+        let stop = items[3].try_parse_i64()?;
 
-        Ok(LRangeParams {
-            key: key.into(),
-            start,
-            stop,
-        })
-    }
-}
-
-fn parse_i64(value: &Value) -> Result<i64, ProtocolError> {
-    match value {
-        Value::BulkString(Some(data)) => {
-            let s = String::from_utf8_lossy(data);
-            s.parse::<i64>().map_err(|_| ProtocolError::NotAnInteger)
-        }
-        Value::SimpleString(s) => s.parse::<i64>().map_err(|_| ProtocolError::NotAnInteger),
-        Value::Integer(n) => Ok(*n),
-        _ => Err(ProtocolError::NotAnInteger),
+        Ok(LRangeParams { key, start, stop })
     }
 }
 

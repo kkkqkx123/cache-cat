@@ -40,13 +40,11 @@ impl PersistParams {
             return Err(ProtocolError::WrongArgCount("persist"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(PersistParams { key: key.into() })
+        Ok(PersistParams { key })
     }
 }
 

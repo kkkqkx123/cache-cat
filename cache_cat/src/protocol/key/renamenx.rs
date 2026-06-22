@@ -32,22 +32,15 @@ impl RenameNxParams {
             return Err(ProtocolError::WrongArgCount("renamenx"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("renamenx")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("renamenx"))?;
 
-        let new_key = match &items[2] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("renamenx")),
-        };
+        let new_key = items[2]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("renamenx"))?;
 
-        Ok(RenameNxParams {
-            key: key.into(),
-            new_key: new_key.into(),
-        })
+        Ok(RenameNxParams { key, new_key })
     }
 }
 

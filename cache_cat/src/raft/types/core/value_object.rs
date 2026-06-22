@@ -1,14 +1,15 @@
+use crate::protocol::zset::zadd::ZAddReq;
+use bytes::Bytes;
 use ordered_float::OrderedFloat;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use crate::protocol::zset::zadd::ZAddReq;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SortedSet {
-    tree: BTreeMap<(OrderedFloat<f64>, Arc<Vec<u8>>), ()>,
-    hash: HashMap<Arc<Vec<u8>>, f64>,
+    tree: BTreeMap<(OrderedFloat<f64>, Bytes), ()>,
+    hash: HashMap<Bytes, f64>,
 }
 
 impl SortedSet {
@@ -26,7 +27,7 @@ impl SortedSet {
             let old_score = self.hash.get(&member).cloned();
             let exists = old_score.is_some();
 
-            // 1. 处理 NX (只新增) / XX (只更新)
+            // 1. Processing NX (new only) / XX (updated only)
             if req.nx && exists {
                 continue;
             }
@@ -35,7 +36,7 @@ impl SortedSet {
             }
 
             if let Some(old_s) = old_score {
-                // 2. 处理 GT / LT
+                // 2. Processing GT / LT
                 if req.gt && score <= old_s {
                     continue;
                 }
@@ -43,18 +44,18 @@ impl SortedSet {
                     continue;
                 }
 
-                // 3. 执行更新
+                // 3. perform updates
                 if old_s != score {
-                    // 先从 tree 中移除旧的排序节点
+                    // Remove the old sorting nodes from the tree first
                     self.tree.remove(&(OrderedFloat(old_s), member.clone()));
-                    // 插入新的排序节点
+                    // Insert a new sorting node
                     self.tree.insert((OrderedFloat(score), member.clone()), ());
-                    // 更新哈希表
+                    // Update Hash Table
                     self.hash.insert(member.clone(), score);
                     changed += 1;
                 }
             } else {
-                // 4. 执行新增
+                // 4. Execute addition
                 self.tree.insert((OrderedFloat(score), member.clone()), ());
                 self.hash.insert(member.clone(), score);
                 added += 1;
@@ -65,15 +66,15 @@ impl SortedSet {
         if req.ch { changed } else { added }
     }
 
-    pub fn zrange(&self, start: i64, stop: i64, with_scores: bool) -> Vec<Vec<u8>> {
+    pub fn zrange(&self, start: i64, stop: i64, with_scores: bool) -> Vec<Bytes> {
         let len = self.hash.len() as i64;
         if len == 0 {
             return vec![];
         }
-        // 1. 处理 Redis 负数索引逻辑
+        // 1. Handling Redis Negative Index Logic
         let mut start_idx = if start < 0 { len + start } else { start };
         let mut stop_idx = if stop < 0 { len + stop } else { stop };
-        // 边界修正
+        // Boundary correction
         if start_idx < 0 {
             start_idx = 0;
         }
@@ -84,34 +85,34 @@ impl SortedSet {
             return vec![];
         }
         let count = (stop_idx - start_idx + 1) as usize;
-        // 2. 预分配空间以提高性能
-        // 如果带分数，空间翻倍
+        // 2. Pre allocate space to improve performance
+        // If scores are included, the space doubles
         let result_capacity = if with_scores { count * 2 } else { count };
         let mut result = Vec::with_capacity(result_capacity);
 
-        // 3. 迭代 BTreeMap 提取数据
-        // tree 的顺序已经是 (Score, Member) 排序好的
+        // 3. Iterate BTreeMap to extract data
+        // The order of the tree is already sorted by (Score, Member)
         let range_iter = self.tree.keys().skip(start_idx as usize).take(count);
 
         for (score, member) in range_iter {
-            // 插入成员
-            result.push((**member).clone());
+            // Insert member
+            result.push(member.clone());
 
-            // 如果需要分数，将 f64 转换为字符串字节
+            // If scores are required, convert f64 to string bytes
             if with_scores {
-                let s = score.0.to_string();
-                result.push(s.into_bytes());
+                result.push(score.0.to_string().into())
             }
         }
         result
     }
+
     pub fn zrangebyscore(
         &self,
         min: f64,
         max: f64,
         with_scores: bool,
         limit: Option<(usize, usize)>,
-    ) -> Vec<Vec<u8>> {
+    ) -> Vec<Bytes> {
         if self.tree.is_empty() {
             return vec![];
         }
@@ -119,8 +120,8 @@ impl SortedSet {
         let min_score = OrderedFloat(min);
         let max_score = OrderedFloat(max);
 
-        // 直接遍历整个 BTreeMap，在迭代中进行分数过滤
-        // 这样避免了边界值问题，且不需要 collect
+        // Traverse the entire BTreeMap directly and perform score filtering during iterations
+        // This avoids boundary value problems and does not require collection
         let skip_count = limit.map(|(offset, _)| offset).unwrap_or(0);
         let take_count = limit.map(|(_, count)| count).unwrap_or(usize::MAX);
 
@@ -128,9 +129,10 @@ impl SortedSet {
         let mut skipped = 0;
         let mut taken = 0;
 
-        for ((score, member), _) in self.tree.range(
-            (min_score, Arc::new(vec![]))..=(max_score, Arc::new(vec![]))
-        ) {
+        for ((score, member), _) in self
+            .tree
+            .range((min_score, Bytes::new())..=(max_score, Bytes::new()))
+        {
             if skipped < skip_count {
                 skipped += 1;
                 continue;
@@ -140,9 +142,9 @@ impl SortedSet {
                 break;
             }
 
-            result.push((**member).clone());
+            result.push(member.clone());
             if with_scores {
-                result.push(score.0.to_string().into_bytes());
+                result.push(score.0.to_string().into())
             }
             taken += 1;
         }
@@ -152,25 +154,34 @@ impl SortedSet {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum HashValue {
-    Str(Arc<Vec<u8>>),
+    Str(Bytes),
     Int(i64),
+}
+
+impl HashValue {
+    pub(crate) fn to_bytes(&self) -> Bytes {
+        match self {
+            HashValue::Str(str) => str.clone(),
+            HashValue::Int(int) => int.to_string().into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ValueObject {
     Int(i64),
-    String(Arc<Vec<u8>>),
+    String(Bytes),
     #[serde(with = "mutex_vecdeque_serde")]
-    List(Arc<Mutex<VecDeque<Arc<Vec<u8>>>>>),
+    List(Arc<Mutex<VecDeque<Bytes>>>),
     #[serde(with = "mutex_hashmap_serde")]
-    Hash(Arc<Mutex<HashMap<Arc<Vec<u8>>, HashValue>>>),
+    Hash(Arc<Mutex<HashMap<Bytes, HashValue>>>),
     #[serde(with = "mutex_zset_serde")]
     ZSet(Arc<Mutex<SortedSet>>),
     #[serde(with = "mutex_hashset_serde")]
-    Set(Arc<Mutex<HashSet<Arc<Vec<u8>>>>>),
+    Set(Arc<Mutex<HashSet<Bytes>>>),
 }
 
-// 通用序列化宏
+// Universal serialization macro
 macro_rules! impl_mutex_serde {
     ($mod_name:ident, $inner_type:ty) => {
         mod $mod_name {
@@ -200,7 +211,7 @@ macro_rules! impl_mutex_serde {
     };
 }
 
-impl_mutex_serde!(mutex_vecdeque_serde, VecDeque<Arc<Vec<u8>>>);
-impl_mutex_serde!(mutex_hashmap_serde, HashMap<Arc<Vec<u8>>, HashValue>);
+impl_mutex_serde!(mutex_vecdeque_serde, VecDeque<Bytes>);
+impl_mutex_serde!(mutex_hashmap_serde, HashMap<Bytes, HashValue>);
 impl_mutex_serde!(mutex_zset_serde, SortedSet);
-impl_mutex_serde!(mutex_hashset_serde, HashSet<Arc<Vec<u8>>>);
+impl_mutex_serde!(mutex_hashset_serde, HashSet<Bytes>);

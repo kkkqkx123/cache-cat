@@ -3,6 +3,7 @@ use crate::protocol::command::{Client, Command};
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
+use bytes::Bytes;
 
 /// Parsed HELLO arguments
 #[derive(Debug)]
@@ -226,11 +227,13 @@ impl Command for HelloCommand {
         // Server info
         response_data.push((
             "server".to_string(),
-            Value::BulkString(Some(b"redis".to_vec())),
+            Value::BulkString(Some(Bytes::from_static(b"redis"))),
         ));
         response_data.push((
             "version".to_string(),
-            Value::BulkString(Some(env!("CARGO_PKG_VERSION").as_bytes().to_vec())),
+            Value::BulkString(Some(Bytes::from_static(
+                env!("CARGO_PKG_VERSION").as_bytes(),
+            ))),
         ));
 
         // Protocol version
@@ -245,13 +248,13 @@ impl Command for HelloCommand {
         // Mode
         response_data.push((
             "mode".to_string(),
-            Value::BulkString(Some(b"standalone".to_vec())),
+            Value::BulkString(Some(Bytes::from_static(b"standalone"))),
         ));
 
         // Role
         response_data.push((
             "role".to_string(),
-            Value::BulkString(Some(b"master".to_vec())),
+            Value::BulkString(Some(Bytes::from_static(b"master"))),
         ));
 
         // Build the response in appropriate format
@@ -259,14 +262,14 @@ impl Command for HelloCommand {
             // RESP3 map format
             let mut map_pairs = Vec::new();
             for (key, value) in response_data {
-                map_pairs.push((Value::BulkString(Some(key.into_bytes())), value));
+                map_pairs.push((Value::BulkString(Some(key.into())), value));
             }
             Ok(Value::Map(map_pairs))
         } else {
             // RESP2 format - flatten to array of key-value pairs
             let mut arr = Vec::new();
             for (key, value) in response_data {
-                arr.push(Value::BulkString(Some(key.into_bytes())));
+                arr.push(Value::BulkString(Some(key.into())));
                 arr.push(value);
             }
             Ok(Value::Array(Some(arr)))

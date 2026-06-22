@@ -34,29 +34,20 @@ impl BLPopCommand {
         }
 
         // Parse keys (all args except the last one, which is timeout)
-        let mut keys = Vec::with_capacity(items.len() - 2);
-        for item in &items[1..items.len() - 1] {
-            let key = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("key")),
-            };
-            keys.push(key.into());
+        let keys = items[1..items.len() - 1]
+            .iter()
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if keys.len() < items.len() - 2 {
+            return Err(ProtocolError::InvalidArgument("key"));
         }
 
         // Parse timeout (last argument)
-        let timeout = match &items[items.len() - 1] {
-            Value::BulkString(Some(data)) => {
-                let timeout_str = String::from_utf8_lossy(data);
-                timeout_str
-                    .parse::<f64>()
-                    .map_err(|_| ProtocolError::InvalidArgument("timeout"))?
-            }
-            Value::SimpleString(s) => s
-                .parse::<f64>()
-                .map_err(|_| ProtocolError::InvalidArgument("timeout"))?,
-            _ => return Err(ProtocolError::InvalidArgument("timeout")),
-        };
+        let timeout = items[items.len() - 1]
+            .as_str_lossy()
+            .and_then(|v| v.parse::<f64>().ok())
+            .ok_or(ProtocolError::InvalidArgument("timeout"))?;
 
         // Validate timeout
         if timeout < 0.0 {

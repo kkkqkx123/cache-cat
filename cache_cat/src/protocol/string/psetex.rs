@@ -18,29 +18,18 @@ impl PSetExCommand {
             return Err(ProtocolError::WrongArgCount("psetex"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let milliseconds = match &items[2] {
-            Value::BulkString(Some(data)) => String::from_utf8_lossy(data)
-                .parse::<u64>()
-                .map_err(|_| ProtocolError::NotAnInteger)?,
-            Value::SimpleString(s) => s.parse::<u64>().map_err(|_| ProtocolError::NotAnInteger)?,
-            Value::Integer(i) if *i >= 0 => *i as u64,
-            _ => return Err(ProtocolError::NotAnInteger),
-        };
+        let milliseconds = items[2].try_parse_u64()?;
 
-        let value = match &items[3] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("value")),
-        };
+        let value = items[3]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("value"))?;
 
         Ok(SetParams {
-            key: key.into(),
+            key,
             value,
             mode: None,
             get: false,

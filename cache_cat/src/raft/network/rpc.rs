@@ -35,8 +35,7 @@ impl Server {
         startup_tx: Sender<StdResult<(), String>>,
         redis_addr: String,
     ) -> Self {
-        let redis_server =
-            RedisServer::new(app.clone(), redis_addr);
+        let redis_server = RedisServer::new(app.clone(), redis_addr);
         Server {
             app: app.clone(),
             addr,

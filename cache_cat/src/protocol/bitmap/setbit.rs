@@ -1,27 +1,26 @@
-use std::fmt;
 use crate::error::{CacheCatError, ProtocolError};
+use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::cas::ComputeCommand;
+use crate::raft::types::core::mocha::mocha::MyValue;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
+use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::bae_operation::BaseOperation::SetBit;
 use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fmt::Display;
-use std::sync::Arc;
-use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
-use crate::raft::types::core::mocha::cas::ComputeCommand;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::BaseOperation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetBitParams {
     pub key: Bytes,
     pub offset: u64,
-    pub value: u8, // 0 或 1
+    pub value: u8, // 0 or 1
 }
 
 impl Display for SetBitParams {
@@ -53,7 +52,6 @@ impl Display for SetBitReq {
     }
 }
 
-
 impl ComputeCommand for SetBitReq {
     fn key(&self) -> &Bytes {
         &self.key
@@ -68,12 +66,12 @@ impl ComputeCommand for SetBitReq {
         entry: EntrySnapshot<MyValue>,
         _write_clock: u64,
     ) -> (MochaOperation<MyValue>, Value) {
-        // 获取字符串表示的字节数组
+        // Obtain a byte array from its string representation
         let bytes = match &entry.value.data {
-            ValueObject::String(data_arc) => (**data_arc).clone(),
+            ValueObject::String(data_arc) => data_arc.clone(),
             ValueObject::Int(int_value) => {
-                // 整数转换为字符串表示
-                int_value.to_string().into_bytes()
+                // Convert an integer to its string representation
+                int_value.to_string().into()
             }
             _ => {
                 return (
@@ -86,7 +84,7 @@ impl ComputeCommand for SetBitReq {
             }
         };
 
-        let mut bytes = bytes;
+        let mut bytes = BytesMut::from(bytes);
         let offset = self.offset;
         let bit_value = self.value & 1; // Ensure only 0 or 1
 
@@ -110,7 +108,7 @@ impl ComputeCommand for SetBitReq {
             bytes[byte_index] = old_byte & !(1 << bit_position);
         }
 
-        let new_value = MyValue::new(ValueObject::String(Arc::new(bytes)));
+        let new_value = MyValue::new(ValueObject::String(bytes.freeze()));
         (
             MochaOperation::Insert {
                 value: new_value,
@@ -140,14 +138,13 @@ impl ComputeCommand for SetBitReq {
 
         (
             MochaOperation::Insert {
-                value: MyValue::new(ValueObject::String(Arc::new(bytes))),
+                value: MyValue::new(ValueObject::String(bytes.into())),
                 expire: ExpirePolicy::Persistent,
             },
             Value::Integer(0), // Original bit value is 0 for new key
         )
     }
 }
-
 
 pub struct SetBitCommand;
 
@@ -157,87 +154,19 @@ impl SetBitCommand {
             return Err(ProtocolError::WrongArgCount("setbit"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("setbit")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("setbit"))?;
 
-        let offset = match &items[2] {
-            Value::BulkString(Some(data)) => {
-                let s = String::from_utf8_lossy(data);
-                match s.parse::<u64>() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Err(ProtocolError::Custom(
-                            "ERR bit offset is not an integer or out of range",
-                        ));
-                    }
-                }
-            }
-            Value::SimpleString(s) => match s.parse::<u64>() {
-                Ok(v) => v,
-                Err(_) => {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit offset is not an integer or out of range",
-                    ));
-                }
-            },
-            Value::Integer(i) => {
-                if *i < 0 {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit offset is not an integer or out of range",
-                    ));
-                }
-                *i as u64
-            }
-            _ => {
-                return Err(ProtocolError::Custom(
-                    "ERR bit offset is not an integer or out of range",
-                ));
-            }
-        };
+        let offset = items[2].parse_u64().ok_or(ProtocolError::Custom(
+            "ERR bit offset is not an integer or out of range",
+        ))?;
 
-        let value = match &items[3] {
-            Value::BulkString(Some(data)) => {
-                let s = String::from_utf8_lossy(data);
-                match s.parse::<u8>() {
-                    Ok(v) if v <= 1 => v,
-                    _ => {
-                        return Err(ProtocolError::Custom(
-                            "ERR bit is not an integer or out of range",
-                        ));
-                    }
-                }
-            }
-            Value::SimpleString(s) => match s.parse::<u8>() {
-                Ok(v) if v <= 1 => v,
-                _ => {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit is not an integer or out of range",
-                    ));
-                }
-            },
-            Value::Integer(i) => {
-                if *i < 0 || *i > 1 {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit is not an integer or out of range",
-                    ));
-                }
-                *i as u8
-            }
-            _ => {
-                return Err(ProtocolError::Custom(
-                    "ERR bit is not an integer or out of range",
-                ));
-            }
-        };
+        let value = items[3].parse_bool_u8().ok_or(ProtocolError::Custom(
+            "ERR bit is not an integer or out of range",
+        ))?;
 
-        Ok(SetBitParams {
-            key: key.into(),
-            offset,
-            value,
-        })
+        Ok(SetBitParams { key, offset, value })
     }
 }
 

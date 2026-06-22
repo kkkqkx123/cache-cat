@@ -36,14 +36,14 @@ impl DelParams {
             return Err(ProtocolError::WrongArgCount("del"));
         }
 
-        let mut keys: Vec<Bytes> = Vec::with_capacity(items.len() - 1);
-        for item in items.iter().skip(1) {
-            let key = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::WrongArgCount("del")),
-            };
-            keys.push(key.into());
+        let keys = items
+            .iter()
+            .skip(1)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if keys.len() < items.len() - 1 {
+            return Err(ProtocolError::WrongArgCount("del"));
         }
 
         Ok(DelParams { keys })

@@ -29,19 +29,15 @@ impl MsetParams {
         let mut pairs = Vec::with_capacity(args_count / 2);
         let mut i = 1;
         while i < items.len() {
-            let key = match &items[i] {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("key")),
-            };
+            let key = items[i]
+                .string_bytes_clone()
+                .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-            let value = match &items[i + 1] {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("value")),
-            };
+            let value = items[i + 1]
+                .string_bytes_clone()
+                .ok_or(ProtocolError::InvalidArgument("value"))?;
 
-            pairs.push((key.into(), value.into()));
+            pairs.push((key, value));
             i += 2;
         }
 

@@ -1,5 +1,6 @@
 use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
+use crate::protocol::key::pexpire::PExpireReq;
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
@@ -8,7 +9,6 @@ use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use crate::protocol::key::pexpire::PExpireReq;
 
 /// Expire condition flags (NX, XX, GT, LT)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,21 +40,18 @@ impl ExpireParams {
             return Err(ProtocolError::WrongArgCount("expire"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let seconds = parse_u64(&items[2]).ok_or(ProtocolError::NotAnInteger)?;
+        let seconds = items[2].try_parse_u64()?;
 
         // Parse optional condition flag
         let condition = if items.len() >= 4 {
-            let flag = match &items[3] {
-                Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_uppercase(),
-                Value::SimpleString(s) => s.to_uppercase(),
-                _ => return Err(ProtocolError::WrongArgCount("expire")),
-            };
+            let flag = items[3]
+                .as_str_lossy()
+                .ok_or(ProtocolError::WrongArgCount("expire"))?
+                .to_uppercase();
 
             match flag.as_str() {
                 "NX" => Some(ExpireCondition::Nx),
@@ -68,7 +65,7 @@ impl ExpireParams {
         };
 
         Ok(ExpireParams {
-            key: key.into(),
+            key,
             seconds,
             condition,
         })

@@ -17,7 +17,7 @@ impl Command for MultiCommand {
         if items.len() >= 2 {
             return Err(ProtocolError::WrongArgCount("MULTI").into());
         }
-        //如果已经被打开过了
+        // If it has already been opened
         if client.transaction_queue.is_some() {
             return Err(ProtocolError::Custom("MULTI calls can not be nested").into());
         }

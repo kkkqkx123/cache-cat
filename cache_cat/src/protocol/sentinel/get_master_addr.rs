@@ -31,8 +31,8 @@ impl SubCommand for SentinelGetMasterAddrByNameCommand {
         let last_leader = server.app.cluster.last_leader();
         info!("get master addr by name: {}", last_leader);
         Ok(Value::Array(Some(vec![
-            Value::BulkString(Some(last_leader.addr().to_string().into_bytes())),
-            Value::BulkString(Some(last_leader.redis_port().to_string().into_bytes())),
+            Value::BulkString(Some(last_leader.addr().to_string().into())),
+            Value::BulkString(Some(last_leader.redis_port().to_string().into())),
         ])))
     }
 }

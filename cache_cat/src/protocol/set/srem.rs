@@ -15,11 +15,10 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
-use std::sync::Arc;
 
 struct SRemArgs {
     key: Bytes,
-    members: Vec<Vec<u8>>,
+    members: Vec<Bytes>,
 }
 
 pub struct SRemCommand;
@@ -31,29 +30,22 @@ impl SRemCommand {
         }
 
         // Parse key
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         // Parse members
-        let mut members = Vec::with_capacity(items.len() - 2);
+        let members = items
+            .iter()
+            .skip(2)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
 
-        for item in &items[2..] {
-            let member = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("member")),
-            };
-
-            members.push(member);
+        if members.len() < items.len() - 2 {
+            return Err(ProtocolError::InvalidArgument("member"));
         }
 
-        Ok(SRemArgs {
-            key: key.into(),
-            members,
-        })
+        Ok(SRemArgs { key, members })
     }
 }
 
@@ -61,15 +53,9 @@ impl RaftCommand for SRemCommand {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
         let params = Self::parse_args(items)?;
 
-        let mut elements = Vec::new();
-
-        for v in params.members {
-            elements.push(Arc::new(v));
-        }
-
         Ok(Operation::Base(SRem(SRemReq {
             key: params.key,
-            members: elements,
+            members: params.members,
         })))
     }
 }
@@ -98,10 +84,11 @@ impl Command for SRemCommand {
         Ok(value)
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SRemReq {
     pub key: Bytes,
-    pub members: Vec<Arc<Vec<u8>>>,
+    pub members: Vec<Bytes>,
 }
 
 impl Display for SRemReq {

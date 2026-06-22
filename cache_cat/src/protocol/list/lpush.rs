@@ -45,46 +45,37 @@ impl LPushCommand {
         }
 
         // Parse key
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         // Parse elements from items[2..]
-        let mut elements = Vec::with_capacity(items.len() - 2);
-        for item in &items[2..] {
-            let elem = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("element")),
-            };
-            elements.push(elem);
+        let elements = items
+            .iter()
+            .skip(2)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if elements.len() < items.len() - 2 {
+            return Err(ProtocolError::InvalidArgument("element"));
         }
 
-        Ok(LPushArgs {
-            key: key.into(),
-            elements,
-        })
+        Ok(LPushArgs { key, elements })
     }
 }
 
 /// Parsed LPUSH arguments
 struct LPushArgs {
     key: Bytes,
-    elements: Vec<Vec<u8>>,
+    elements: Vec<Bytes>,
 }
 
 impl RaftCommand for LPushCommand {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
         let params = Self::parse_args(items)?;
-        let mut elements = Vec::new();
-        for v in params.elements {
-            elements.push(Arc::new(v));
-        }
         Ok(Operation::Base(LPush(LPushReq {
             key: params.key,
-            elements,
+            elements: params.elements,
         })))
     }
 }
@@ -111,7 +102,7 @@ impl Command for LPushCommand {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LPushReq {
     pub key: Bytes,
-    pub elements: Vec<Arc<Vec<u8>>>,
+    pub elements: Vec<Bytes>,
 }
 
 impl Display for LPushReq {

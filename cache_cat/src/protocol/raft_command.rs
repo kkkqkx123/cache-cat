@@ -117,7 +117,7 @@ impl RaftCommandFactory {
         factory.register("RENAMENX", RenameNxCommand);
         factory.register("SMEMBERS", SMembersCommand);
         factory.register("HMGET", HMGetCommand);
-        factory.register("EVAL", EvalCommand); //禁止套娃(就不禁止)
+        factory.register("EVAL", EvalCommand); // Prohibiting nesting (not prohibited)
         factory.register("SREM", SRemCommand);
         factory.register("SETBIT", SetBitCommand);
         factory.register("GETBIT", GetBitCommand);
@@ -140,11 +140,11 @@ impl RaftCommandFactory {
             _ => return Err(ProtocolError::InvalidArgument("command")),
         };
         match self.commands.get(&cmd_name) {
-            Some(cmd) => match cmd.raft_request(&items) {
+            Some(cmd) => match cmd.raft_request(items) {
                 Ok(v) => Ok(v),
                 Err(e) => {
                     warn!("Command '{}' error: {}", cmd_name, e);
-                    Err(e.into()) // Error → Value::Error
+                    Err(e) // Error → Value::Error
                 }
             },
             None => {

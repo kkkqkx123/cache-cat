@@ -35,13 +35,11 @@ impl LLenCommand {
             return Err(ProtocolError::WrongArgCount("llen"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(LLenParams { key: key.into() })
+        Ok(LLenParams { key })
     }
 }
 

@@ -70,7 +70,7 @@ impl Parser {
         let data = buffer[*pos..*pos + len].to_vec();
         *pos += len + 2; // +2 for \r\n
 
-        Some(Value::BulkString(Some(data)))
+        Some(Value::BulkString(Some(data.into())))
     }
 
     fn parse_array(buffer: &[u8], pos: &mut usize) -> Option<Value> {

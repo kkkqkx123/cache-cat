@@ -6,6 +6,7 @@ use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::request::Operation;
 use crate::raft::types::entry::request::RedisOperation::RedisEval;
 use async_trait::async_trait;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -20,9 +21,9 @@ pub struct EvalParams {
     /// Number of keys
     pub numkeys: usize,
     /// Key names
-    pub keys: Vec<Vec<u8>>,
+    pub keys: Vec<Bytes>,
     /// Arguments
-    pub args: Vec<Vec<u8>>,
+    pub args: Vec<Bytes>,
 }
 
 impl Display for EvalParams {
@@ -43,7 +44,7 @@ impl Display for EvalParams {
 
 impl EvalParams {
     /// Create a new EvalParams
-    pub fn new(script: String, numkeys: usize, keys: Vec<Vec<u8>>, args: Vec<Vec<u8>>) -> Self {
+    pub fn new(script: String, numkeys: usize, keys: Vec<Bytes>, args: Vec<Bytes>) -> Self {
         Self {
             script,
             numkeys,
@@ -61,23 +62,13 @@ impl EvalParams {
         }
 
         // Parse script
-        let script = match &items[1] {
-            Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_string(),
-            Value::SimpleString(s) => s.clone(),
-            _ => return Err(ProtocolError::InvalidArgument("script")),
-        };
+        let script = items[1]
+            .as_str_lossy()
+            .ok_or(ProtocolError::InvalidArgument("script"))?
+            .into_owned();
 
         // Parse numkeys
-        let numkeys = match &items[2] {
-            Value::BulkString(Some(data)) => String::from_utf8_lossy(data)
-                .parse::<usize>()
-                .map_err(|_| ProtocolError::NotAnInteger)?,
-            Value::SimpleString(s) => s
-                .parse::<usize>()
-                .map_err(|_| ProtocolError::NotAnInteger)?,
-            Value::Integer(i) if *i >= 0 => *i as usize,
-            _ => return Err(ProtocolError::NotAnInteger),
-        };
+        let numkeys = items[2].try_parse_usize()?;
 
         // Expected total items: 3 (header) + numkeys + numargs
         // Actual remaining items after script and numkeys: items.len() - 3
@@ -87,15 +78,13 @@ impl EvalParams {
         }
 
         // Parse keys
-        let mut keys = Vec::with_capacity(numkeys);
-        for i in 0..numkeys {
-            let key_value = &items[3 + i];
-            let key = match key_value {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("key")),
-            };
-            keys.push(key);
+        let keys = items[3..3 + numkeys]
+            .iter()
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if keys.len() < numkeys {
+            return Err(ProtocolError::InvalidArgument("key"));
         }
 
         // Parse arguments (remaining items after keys)
@@ -104,8 +93,8 @@ impl EvalParams {
             let arg_value = &items[i];
             let arg = match arg_value {
                 Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                Value::Integer(i) => i.to_string().as_bytes().to_vec(),
+                Value::SimpleString(s) => s.clone().into(),
+                Value::Integer(i) => i.to_string().into(),
                 _ => return Err(ProtocolError::InvalidArgument("argument")),
             };
             args.push(arg);

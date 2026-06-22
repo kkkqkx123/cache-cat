@@ -30,16 +30,15 @@ impl Command for ExecCommand {
         if items.len() >= 2 {
             return Err(ProtocolError::WrongArgCount("EXEC").into());
         }
-        //如果 没有开启事务
-        let params = match client.transaction_queue.take() {
-            None => {
-                return Err(ProtocolError::Custom(
-                    "EXECABORT Transaction discarded because of previous errors.",
-                )
-                .into());
-            }
-            Some(queue) => RedisOperation::RedisExec(ExecParams { operations: queue }),
-        };
+        // If no transaction has been initiated
+        let params = client
+            .transaction_queue
+            .take()
+            .map(|queue| RedisOperation::RedisExec(ExecParams { operations: queue }))
+            .ok_or(ProtocolError::Custom(
+                "EXECABORT Transaction discarded because of previous errors.",
+            ))?;
+
         let value = server
             .app
             .write(Operation::Redis(params), client.db_number)

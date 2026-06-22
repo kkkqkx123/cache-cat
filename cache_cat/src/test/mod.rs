@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use crate::protocol::string::set::SetReq;
     use crate::raft::network::client::RpcMultiClient;
     use crate::raft::network::model::{GetReq, GetRes, PrintTestReq, PrintTestRes};
     use crate::raft::network::pipeline_client::{PipelineClient, PipelineMultiClient};
-    use crate::raft::types::entry::bae_operation::{BaseOperation};
+    use crate::raft::types::entry::bae_operation::BaseOperation;
     use crate::raft::types::entry::request::{Operation, Request};
     use crate::raft::types::raft_types::TypeConfig;
     use crate::utils::now_ms;
@@ -14,7 +15,6 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tokio::time;
-    use crate::protocol::string::set::SetReq;
 
     #[tokio::test]
     async fn test_add() {
@@ -40,7 +40,7 @@ mod tests {
                         0,
                         Operation::Base(BaseOperation::Set(SetReq {
                             key: Bytes::from_owner(format!("test_{}", i)),
-                            value: Arc::from(format!("test_value_{}", i).into_bytes()),
+                            value: Bytes::from_owner(format!("test_value_{}", i)),
                             ex_time: 0,
                         })),
                     ),
@@ -115,7 +115,7 @@ mod tests {
             0,
             Operation::Base(BaseOperation::Set(SetReq {
                 key: Bytes::from_owner(format!("test{}", 1)),
-                value: Arc::from(format!("test_value_{}", 1).into_bytes()),
+                value: Bytes::from_owner(format!("test_value_{}", 1)),
                 ex_time: 0,
             })),
         );

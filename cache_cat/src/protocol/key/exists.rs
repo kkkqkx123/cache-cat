@@ -7,14 +7,14 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::{RaftCommand, ReadRaftCommand};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::MultiReadCommand;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::MultiReadCommand;
 
 /// EXISTS command parameters
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,7 +40,6 @@ impl MultiReadCommand for ExistsParams {
     }
 }
 
-
 impl ExistsParams {
     /// Parse EXISTS command parameters from RESP array items
     /// Format: EXISTS key [key ...]
@@ -50,14 +49,14 @@ impl ExistsParams {
             return Err(ProtocolError::WrongArgCount("exists"));
         }
 
-        let mut keys: Vec<Bytes> = Vec::with_capacity(items.len() - 1);
-        for item in items.iter().skip(1) {
-            let key = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::WrongArgCount("del")),
-            };
-            keys.push(key.into());
+        let keys = items
+            .iter()
+            .skip(1)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if keys.len() < items.len() - 1 {
+            return Err(ProtocolError::WrongArgCount("exists"));
         }
 
         Ok(ExistsParams { keys })

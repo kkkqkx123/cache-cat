@@ -1,26 +1,26 @@
-use std::collections::HashSet;
-use std::fmt;
 use crate::error::{CacheCatError, ProtocolError};
+use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::cas::ComputeCommand;
+use crate::raft::types::core::mocha::mocha::MyValue;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
+use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::bae_operation::BaseOperation::SAdd;
 use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use bytes::Bytes;
-use std::sync::Arc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
-use crate::raft::types::core::mocha::cas::ComputeCommand;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::value_object::ValueObject;
-use crate::raft::types::entry::bae_operation::BaseOperation;
+use std::collections::HashSet;
+use std::fmt;
+use std::sync::Arc;
 
 struct SAddArgs {
     key: Bytes,
-    members: Vec<Vec<u8>>,
+    members: Vec<Bytes>,
 }
 
 pub struct SAddCommand;
@@ -32,39 +32,30 @@ impl SAddCommand {
         }
 
         // Parse key
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let mut members = Vec::with_capacity(items.len() - 2);
-        for item in &items[2..] {
-            let member = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("member")),
-            };
-            members.push(member);
+        let members = items
+            .iter()
+            .skip(2)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if members.len() < items.len() - 2 {
+            return Err(ProtocolError::InvalidArgument("member"));
         }
 
-        Ok(SAddArgs {
-            key: key.into(),
-            members,
-        })
+        Ok(SAddArgs { key, members })
     }
 }
 
 impl RaftCommand for SAddCommand {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
         let params = Self::parse_args(items)?;
-        let mut elements = Vec::new();
-        for v in params.members {
-            elements.push(Arc::new(v));
-        }
         Ok(Operation::Base(SAdd(SAddReq {
             key: params.key,
-            elements,
+            elements: params.members,
         })))
     }
 }
@@ -87,10 +78,11 @@ impl Command for SAddCommand {
         Ok(value)
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SAddReq {
     pub key: Bytes,
-    pub elements: Vec<Arc<Vec<u8>>>,
+    pub elements: Vec<Bytes>,
 }
 
 impl fmt::Display for SAddReq {

@@ -57,12 +57,12 @@ impl Cluster {
     pub fn new(raft: Raft, current_endpoint: Endpoint) -> Self {
         let election_timeout_max = raft.config().election_timeout_max;
 
-        let last_master = Arc::new(AtomicU16::new(raft.node_id().clone()));
+        let last_master = Arc::new(AtomicU16::new(*raft.node_id()));
         let last = last_master.clone();
         let watch_change_handle = raft.on_cluster_leader_change(move |_old, new| {
             let last = last.clone();
             async move {
-                // 假设 LeaderId 有 node_id 字段，并且是 u16 类型
+                // Assuming that LeaderId has a node_id field and is of type u16
                 last.store(new.0.node_id, std::sync::atomic::Ordering::Relaxed);
             }
         });
@@ -94,7 +94,7 @@ impl Cluster {
                 }
             }
         }
-        node_state_map.insert(self.node_id().clone(), Duration::from_secs(0));
+        node_state_map.insert(self.node_id(), Duration::from_secs(0));
         Some(NodeState::new(
             node_state_map,
             self.raft.config().election_timeout_max,
@@ -112,7 +112,7 @@ impl Cluster {
         res
     }
 
-    //如果没有选出过leader就返回自己
+    // If no leader has been selected, return to self
     pub fn last_leader(&self) -> Endpoint {
         let node_id = self.last_master.load(std::sync::atomic::Ordering::Relaxed);
         let metrics_guard = self.raft.metrics();
@@ -129,7 +129,7 @@ impl Cluster {
     }
 
     pub fn node_id(&self) -> NodeId {
-        self.raft.node_id().clone()
+        *self.raft.node_id()
     }
 
     pub async fn leader_addr(&self) -> Option<Endpoint> {
@@ -219,8 +219,8 @@ impl Cluster {
     pub async fn remove_self(
         &self,
     ) -> Result<(), RaftError<TypeConfig, ClientWriteError<TypeConfig>>> {
-        // 使用 AddVoters 而不是传入完整集合
-        // 这会自动计算并添加到现有成员中
+        // Use AddVoters instead of passing in a complete set
+        // This will be automatically calculated and added to existing members
 
         let mut set: BTreeSet<NodeId> = BTreeSet::new();
         set.insert(self.node_id());

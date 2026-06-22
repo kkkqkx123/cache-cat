@@ -3,6 +3,7 @@ use crate::protocol::command::{Client, SubCommand};
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
+use bytes::Bytes;
 
 pub struct SentinelSlavesCommand;
 #[async_trait]
@@ -33,48 +34,54 @@ impl SubCommand for SentinelSlavesCommand {
 
         for slave in slaves {
             let mut slave_info = Vec::new();
-            slave_info.push(Value::BulkString(Some(b"name".to_vec())));
-            slave_info.push(Value::BulkString(Some(slave.endpoint.redis_addr().into_bytes())));
-            slave_info.push(Value::BulkString(Some(b"ip".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"name"))));
+            slave_info.push(Value::BulkString(Some(slave.endpoint.redis_addr().into())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"ip"))));
             slave_info.push(Value::BulkString(Some(
-                slave.endpoint.addr().to_string().into_bytes(),
+                slave.endpoint.addr().to_string().into(),
             )));
-            slave_info.push(Value::BulkString(Some(b"port".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"port"))));
             slave_info.push(Value::BulkString(Some(
-                slave.endpoint.redis_port().to_string().into_bytes(),
+                slave.endpoint.redis_port().to_string().into(),
             )));
-            slave_info.push(Value::BulkString(Some(b"runid".to_vec())));
-            slave_info.push(Value::BulkString(Some(
-                current_node_id.to_string().into_bytes(),
-            )));
-            slave_info.push(Value::BulkString(Some(b"flags".to_vec())));
-            if server.app.cluster.is_survive(slave.node_id).await{
-                slave_info.push(Value::BulkString(Some(b"slave".to_vec())));
-            }else{
-                slave_info.push(Value::BulkString(Some(b"slave,o_down,disconnected".to_vec())));
-            }
-
-            slave_info.push(Value::BulkString(Some(b"master-link-status".to_vec())));
-            if leader_info.is_some() {
-                slave_info.push(Value::BulkString(Some(b"ok".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"runid"))));
+            slave_info.push(Value::BulkString(Some(current_node_id.to_string().into())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"flags"))));
+            if server.app.cluster.is_survive(slave.node_id).await {
+                slave_info.push(Value::BulkString(Some(Bytes::from_static(b"slave"))));
             } else {
-                slave_info.push(Value::BulkString(Some(b"err".to_vec())));
+                slave_info.push(Value::BulkString(Some(Bytes::from_static(
+                    b"slave,o_down,disconnected",
+                ))));
             }
 
-            slave_info.push(Value::BulkString(Some(b"master-host".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(
+                b"master-link-status",
+            ))));
+            if leader_info.is_some() {
+                slave_info.push(Value::BulkString(Some(Bytes::from_static(b"ok"))));
+            } else {
+                slave_info.push(Value::BulkString(Some(Bytes::from_static(b"err"))));
+            }
+
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"master-host"))));
             slave_info.push(Value::BulkString(Some(
-                last_leader.addr().to_string().into_bytes(),
+                last_leader.addr().to_string().into(),
             )));
-            slave_info.push(Value::BulkString(Some(b"master-port".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"master-port"))));
             slave_info.push(Value::BulkString(Some(
-                last_leader.port().to_string().into_bytes(),
+                last_leader.port().to_string().into(),
             )));
 
-            slave_info.push(Value::BulkString(Some(b"slave-repl-offset".to_vec())));
-            slave_info.push(Value::BulkString(Some(b"0".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(
+                b"slave-repl-offset",
+            ))));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"0"))));
 
-            slave_info.push(Value::BulkString(Some(b"slave-priority".to_vec())));
-            slave_info.push(Value::BulkString(Some(b"100".to_vec())));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(
+                b"slave-priority",
+            ))));
+            slave_info.push(Value::BulkString(Some(Bytes::from_static(b"100"))));
 
             result.push(Value::Array(Some(slave_info)));
         }

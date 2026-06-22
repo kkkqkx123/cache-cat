@@ -10,7 +10,7 @@ use crate::protocol::hash::hvals::HValsParams;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
 use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
-use crate::raft::types::core::value_object::{HashValue, ValueObject};
+use crate::raft::types::core::value_object::ValueObject;
 use bytes::Bytes;
 
 impl ReadCommand for HValsParams {
@@ -25,16 +25,10 @@ impl ReadCommand for HValsParams {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
 
-                    let mut result = Vec::with_capacity(guard.len());
-
-                    for value in guard.values() {
-                        let value_bytes = match value {
-                            HashValue::Str(str) => str.as_ref().clone(),
-                            HashValue::Int(int) => int.to_string().into_bytes(),
-                        };
-
-                        result.push(Value::BulkString(Some(value_bytes)));
-                    }
+                    let result = guard
+                        .values()
+                        .map(|v| Value::BulkString(Some(v.to_bytes())))
+                        .collect::<Vec<_>>();
 
                     Value::Array(Some(result))
                 }
@@ -55,17 +49,16 @@ impl ReadCommand for HGetAllParams {
             Some(v) => match v.data {
                 ValueObject::Hash(map) => {
                     let guard = map.lock();
-                    let mut result = Vec::with_capacity(guard.len());
-                    for (field, value) in guard.iter() {
-                        let value_bytes = match value {
-                            HashValue::Str(str) => str.as_ref().clone(),
-                            HashValue::Int(int) => int.to_string().into_bytes(),
-                        };
-                        result.push((
-                            Value::BulkString(Some(field.as_ref().clone())),
-                            Value::BulkString(Some(value_bytes)),
-                        ));
-                    }
+                    let result = guard
+                        .iter()
+                        .map(|(field, value)| {
+                            (
+                                Value::BulkString(Some(field.clone())),
+                                Value::BulkString(Some(value.to_bytes())),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+
                     Value::Map(result)
                 }
                 _ => CacheCatError::from(ProtocolError::WrongType).into(),
@@ -88,12 +81,7 @@ impl ReadCommand for HGetParams {
                     let option = guard.get(&self.field);
                     match option {
                         None => Value::BulkString(None),
-                        Some(value) => match value {
-                            HashValue::Str(str) => Value::BulkString(Some(str.as_ref().clone())),
-                            HashValue::Int(int) => {
-                                Value::BulkString(Some(int.to_string().as_bytes().to_vec()))
-                            }
-                        },
+                        Some(value) => Value::BulkString(Some(value.to_bytes())),
                     }
                 }
                 _ => ProtocolError::WrongType.into(),

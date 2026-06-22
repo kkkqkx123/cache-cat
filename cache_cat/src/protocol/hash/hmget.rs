@@ -7,22 +7,22 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::{HashValue, ValueObject};
 use crate::raft::types::entry::read_operation::ReadOperation;
 use crate::raft::types::entry::request::Operation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::{HashValue, ValueObject};
 
 /// Parsed HMGET arguments
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HMGetParams {
     pub key: Bytes,
-    pub fields: Vec<Vec<u8>>,
+    pub fields: Vec<Bytes>,
 }
 
 impl Display for HMGetParams {
@@ -57,11 +57,9 @@ impl ReadCommand for HMGetParams {
                         .map(|field| match guard.get(field) {
                             None => Value::BulkString(None),
                             Some(value) => match value {
-                                HashValue::Str(str) => {
-                                    Value::BulkString(Some(str.as_ref().clone()))
-                                }
+                                HashValue::Str(str) => Value::BulkString(Some(str.clone())),
                                 HashValue::Int(int) => {
-                                    Value::BulkString(Some(int.to_string().as_bytes().to_vec()))
+                                    Value::BulkString(Some(int.to_string().into()))
                                 }
                             },
                         })
@@ -73,7 +71,6 @@ impl ReadCommand for HMGetParams {
         }
     }
 }
-
 
 /// HMGET command handler
 pub struct HMGetCommand;
@@ -88,27 +85,22 @@ impl HMGetCommand {
         }
 
         // Parse key
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         // Parse all fields (starting from index 2)
-        let mut fields = Vec::with_capacity(items.len() - 2);
-        for item in &items[2..] {
-            let field = match item {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("field")),
-            };
-            fields.push(field);
+        let fields = items
+            .iter()
+            .skip(2)
+            .map_while(Value::string_bytes_clone)
+            .collect::<Vec<_>>();
+
+        if fields.len() < items.len() - 2 {
+            return Err(ProtocolError::InvalidArgument("field"));
         }
 
-        Ok(HMGetParams {
-            key: key.into(),
-            fields,
-        })
+        Ok(HMGetParams { key, fields })
     }
 }
 

@@ -38,41 +38,21 @@ impl LPopCommand {
             return Err(ProtocolError::WrongArgCount("lpop"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         let count = if items.len() == 3 {
-            match &items[2] {
-                Value::BulkString(Some(data)) => {
-                    let s = String::from_utf8_lossy(data);
-                    Some(
-                        s.parse::<u64>()
-                            .map_err(|_| ProtocolError::InvalidArgument("count"))?,
-                    )
-                }
-                Value::SimpleString(s) => Some(
-                    s.parse::<u64>()
-                        .map_err(|_| ProtocolError::InvalidArgument("count"))?,
-                ),
-                Value::Integer(i) => {
-                    if *i < 0 {
-                        return Err(ProtocolError::InvalidArgument("count"));
-                    }
-                    Some(*i as u64)
-                }
-                _ => return Err(ProtocolError::InvalidArgument("count")),
-            }
+            Some(
+                items[2]
+                    .parse_u64()
+                    .ok_or(ProtocolError::InvalidArgument("count"))?,
+            )
         } else {
             None
         };
 
-        Ok(LPopArgs {
-            key: key.into(),
-            count,
-        })
+        Ok(LPopArgs { key, count })
     }
 }
 
@@ -156,7 +136,7 @@ impl ComputeCommand for LPopReq {
                             value: entry.value.clone(),
                             expire: entry.get_expire_policy(),
                         },
-                        Value::BulkString(Some((*value).clone())),
+                        Value::BulkString(Some(value)),
                     ),
                     None => (
                         MochaOperation::Insert {

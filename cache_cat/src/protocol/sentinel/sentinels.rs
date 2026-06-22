@@ -3,6 +3,7 @@ use crate::protocol::command::{Client, SubCommand};
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
+use bytes::Bytes;
 
 pub struct SentinelSentinelsCommand;
 
@@ -25,7 +26,7 @@ impl SubCommand for SentinelSentinelsCommand {
             _ => return Err(ProtocolError::InvalidArgument("master name").into()),
         };
 
-        // master name 不匹配直接返回空数组
+        // If the master name does not match, return an empty array directly
         if server.app.config.sentinel_master_name != name {
             return Ok(Value::Array(None));
         }
@@ -33,32 +34,30 @@ impl SubCommand for SentinelSentinelsCommand {
         let mut result = Vec::new();
         for (node_id, node) in nodes {
             let mut info = Vec::new();
-            info.push(Value::BulkString(Some(b"name".to_vec())));
-            //这里返回node_id作为哨兵的名字
+            info.push(Value::BulkString(Some(Bytes::from_static(b"name"))));
+            // Here returns node_id as the name of the sentinel
+            info.push(Value::BulkString(Some(node_id.to_string().into())));
+
+            info.push(Value::BulkString(Some(Bytes::from_static(b"ip"))));
             info.push(Value::BulkString(Some(
-                node_id.to_string().into_bytes(),
+                node.endpoint.addr().to_string().into(),
             )));
 
-            info.push(Value::BulkString(Some(b"ip".to_vec())));
+            info.push(Value::BulkString(Some(Bytes::from_static(b"port"))));
             info.push(Value::BulkString(Some(
-                node.endpoint.addr().to_string().into_bytes(),
+                node.endpoint.redis_port().to_string().into(),
             )));
 
-            info.push(Value::BulkString(Some(b"port".to_vec())));
-            info.push(Value::BulkString(Some(
-                node.endpoint.redis_port().to_string().into_bytes(),
-            )));
+            info.push(Value::BulkString(Some(Bytes::from_static(b"runid"))));
+            info.push(Value::BulkString(Some(node_id.to_string().into())));
 
-            info.push(Value::BulkString(Some(b"runid".to_vec())));
-            info.push(Value::BulkString(Some(
-                node_id.to_string().into_bytes(),
-            )));
-
-            info.push(Value::BulkString(Some(b"flags".to_vec())));
-            if server.app.cluster.is_survive(node_id).await{
-                info.push(Value::BulkString(Some(b"sentinel".to_vec())));
-            }else{
-                info.push(Value::BulkString(Some(b"sentinel,o_down,disconnected".to_vec())));
+            info.push(Value::BulkString(Some(Bytes::from_static(b"flags"))));
+            if server.app.cluster.is_survive(node_id).await {
+                info.push(Value::BulkString(Some(Bytes::from_static(b"sentinel"))));
+            } else {
+                info.push(Value::BulkString(Some(Bytes::from_static(
+                    b"sentinel,o_down,disconnected",
+                ))));
             }
 
             result.push(Value::Array(Some(info)));

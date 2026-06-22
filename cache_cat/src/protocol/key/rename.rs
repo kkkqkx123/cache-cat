@@ -31,22 +31,15 @@ impl RenameParams {
             return Err(ProtocolError::WrongArgCount("rename"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("rename")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("rename"))?;
 
-        let new_key = match &items[2] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("rename")),
-        };
+        let new_key = items[2]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("rename"))?;
 
-        Ok(RenameParams {
-            key: key.into(),
-            new_key: new_key.into(),
-        })
+        Ok(RenameParams { key, new_key })
     }
 }
 impl Display for RenameParams {

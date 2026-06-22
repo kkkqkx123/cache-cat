@@ -14,19 +14,17 @@ impl Command for DiscardCommand {
         items: &[Value],
         _server: &RedisServer,
     ) -> Result<Value, CacheCatError> {
-        // DISCARD 不接受额外参数
+        // DISCARD does not accept additional parameters
         if items.len() >= 2 {
             return Err(ProtocolError::WrongArgCount("DISCARD").into());
         }
 
-        // 必须先开启 MULTI
+        // MULTI must be enabled first
         if client.transaction_queue.is_none() {
-            return Err(
-                ProtocolError::Custom("DISCARD without MULTI").into()
-            );
+            return Err(ProtocolError::Custom("DISCARD without MULTI").into());
         }
 
-        // 清空事务队列
+        // Clear transaction queue
         client.transaction_queue = None;
 
         Ok(Value::ok())

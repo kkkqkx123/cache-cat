@@ -1,6 +1,8 @@
+use crate::error::ProtocolError;
+use bytes::Bytes;
 use mlua::{Lua, Value as LuaValue};
 use serde::{Deserialize, Serialize};
-use crate::error::ProtocolError;
+use std::borrow::Cow;
 
 /// A response from the KV store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -8,7 +10,7 @@ pub enum Value {
     SimpleString(String),
     Error(String),
     Integer(i64),
-    BulkString(Option<Vec<u8>>),
+    BulkString(Option<Bytes>),
     Array(Option<Vec<Value>>),
     /// Key-value mapping (RESP3: %N map, RESP2: flat array *2N)
     Map(Vec<(Value, Value)>),
@@ -160,10 +162,7 @@ impl Value {
                 let table = lua.create_table()?;
 
                 for (k, v) in map {
-                    table.set(
-                        k.into_lua_value(lua)?,
-                        v.into_lua_value(lua)?,
-                    )?;
+                    table.set(k.into_lua_value(lua)?, v.into_lua_value(lua)?)?;
                 }
                 Ok(mlua::Value::Table(table))
             }
@@ -179,28 +178,26 @@ impl Value {
             }
         }
     }
-    pub fn from_lua(lua_val: LuaValue, lua: &Lua) ->  Result<Value, ProtocolError>{
+    pub fn from_lua(lua_val: LuaValue, lua: &Lua) -> Result<Value, ProtocolError> {
         match lua_val {
             LuaValue::Nil | LuaValue::Boolean(false) => Ok(Value::BulkString(None)),
             LuaValue::Boolean(true) => Ok(Value::Integer(1)),
             LuaValue::Integer(i) => Ok(Value::Integer(i)),
             LuaValue::Number(n) => {
-                // 浮点数统一转为 BulkString 形式，保持与 Redis 行为一致
-                Ok(Value::BulkString(Some(n.to_string().into_bytes())))
+                // Convert floating-point numbers to BulkString format uniformly,
+                // maintaining consistency with Redis behavior
+                Ok(Value::BulkString(Some(n.to_string().into())))
             }
-            LuaValue::String(s) => {
-                let bytes = s.as_bytes().to_vec();
-                Ok(Value::BulkString(Some(bytes)))
-            }
+            LuaValue::String(s) => Ok(Value::BulkString(Some(s.as_bytes().to_vec().into()))),
             LuaValue::Table(t) => {
-                // 空表直接返回空数组
+                // Empty table directly returns an empty array
                 let pairs: Vec<(LuaValue, LuaValue)> = t.pairs().collect::<Result<Vec<_>, _>>()?;
 
                 if pairs.is_empty() {
                     return Ok(Value::Array(Some(Vec::new())));
                 }
 
-                // 检查是否为状态回复：{ ok = "..." } 或 { err = "..." }
+                // Check if it is a status reply: { ok = "..." } or { err = "..." }
                 if pairs.len() == 1 {
                     if let (LuaValue::String(key), value) = &pairs[0] {
                         if key.as_bytes() == b"ok" {
@@ -221,7 +218,7 @@ impl Value {
                     }
                 }
 
-                // 判断是否为纯数组（键为 1..n 的连续整数）
+                // Determine whether it is a pure array (continuous integers with keys 1..n)
                 let mut is_array = true;
                 let mut seen = vec![false; pairs.len()];
                 for (k, _) in &pairs {
@@ -237,7 +234,7 @@ impl Value {
                 is_array = is_array && seen.iter().all(|&b| b);
 
                 if is_array {
-                    // 按索引顺序组装数组
+                    // Assemble arrays in index order
                     let mut values = vec![LuaValue::Nil; pairs.len()];
                     for (k, v) in pairs {
                         if let LuaValue::Integer(idx) = k {
@@ -250,7 +247,7 @@ impl Value {
                     }
                     Ok(Value::Array(Some(redis_arr)))
                 } else {
-                    // 映射表 -> 扁平化键值对数组
+                    // Mapping Table -> Flatten Key Value Pair Array
                     let mut flat = Vec::with_capacity(pairs.len() * 2);
                     for (k, v) in pairs {
                         flat.push(Value::from_lua(k, lua)?);
@@ -259,12 +256,108 @@ impl Value {
                     Ok(Value::Array(Some(flat)))
                 }
             }
-            // 以下类型无法安全映射为 Redis 值，返回错误
+            // The following types cannot be securely mapped to Redis values, resulting in an error
             LuaValue::Error(err) => Ok(Value::Error(err.to_string())),
             other => Ok(Value::Error(format!(
                 "Cannot convert Lua value to Redis: {:?}",
                 other
             ))),
+        }
+    }
+
+    pub(crate) fn string_bytes_clone(&self) -> Option<Bytes> {
+        match self {
+            Value::BulkString(Some(data)) => Some(data.clone()),
+            Value::SimpleString(s) => Some(s.clone().into()),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn as_str_lossy(&self) -> Option<Cow<'_, str>> {
+        match self {
+            Value::BulkString(Some(data)) => Some(String::from_utf8_lossy(data)),
+            Value::SimpleString(s) => Some(Cow::Borrowed(s)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn parse_u64(&self) -> Option<u64> {
+        match self {
+            Value::BulkString(Some(data)) => String::from_utf8_lossy(data).parse::<u64>().ok(),
+
+            Value::SimpleString(s) => s.parse::<u64>().ok(),
+
+            Value::Integer(i) if *i >= 0 => Some(*i as u64),
+
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn try_parse_u64(&self) -> Result<u64, ProtocolError> {
+        self.parse_u64().ok_or(ProtocolError::NotAnInteger)
+    }
+
+    pub(crate) fn parse_i64(&self) -> Option<i64> {
+        match self {
+            Value::BulkString(Some(data)) => String::from_utf8_lossy(data).parse::<i64>().ok(),
+
+            Value::SimpleString(s) => s.parse::<i64>().ok(),
+
+            Value::Integer(i) => Some(*i),
+
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn try_parse_i64(&self) -> Result<i64, ProtocolError> {
+        self.parse_i64().ok_or(ProtocolError::NotAnInteger)
+    }
+
+    pub(crate) fn parse_usize(&self) -> Option<usize> {
+        match self {
+            Value::BulkString(Some(data)) => String::from_utf8_lossy(data).parse::<usize>().ok(),
+
+            Value::SimpleString(s) => s.parse::<usize>().ok(),
+
+            Value::Integer(i) if *i >= 0 => Some(*i as usize),
+
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn try_parse_usize(&self) -> Result<usize, ProtocolError> {
+        self.parse_usize().ok_or(ProtocolError::NotAnInteger)
+    }
+
+    pub(crate) fn parse_bool_u8(&self) -> Option<u8> {
+        match self {
+            Value::BulkString(Some(data)) => {
+                if let Ok(v) = String::from_utf8_lossy(data).parse::<u8>()
+                    && v <= 1
+                {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+
+            Value::SimpleString(s) => {
+                if let Ok(v) = s.parse::<u8>()
+                    && v <= 1
+                {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+
+            Value::Integer(i) if matches!(*i, 0..=1) => Some(*i as u8),
+
+            _ => None,
         }
     }
 }

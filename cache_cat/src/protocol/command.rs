@@ -21,11 +21,13 @@ use crate::protocol::key::del::DelCommand;
 use crate::protocol::key::exists::ExistsCommand;
 use crate::protocol::key::expire::ExpireCommand;
 use crate::protocol::key::persist::PersistCommand;
+use crate::protocol::key::pexpire::PExpireCommand;
 use crate::protocol::key::rename::RenameCommand;
 use crate::protocol::key::renamenx::RenameNxCommand;
 use crate::protocol::list::llen::LLenCommand;
 use crate::protocol::list::lpush::LPushCommand;
 use crate::protocol::list::lrange::LRangeCommand;
+use crate::protocol::list::rpush::RPushCommand;
 use crate::protocol::lua::eval::EvalCommand;
 use crate::protocol::lua::evalsha::EvalShaCommand;
 use crate::protocol::lua::script::ScriptCommand;
@@ -75,8 +77,6 @@ use tokio::select;
 use tokio::sync::watch;
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
-use crate::protocol::key::pexpire::PExpireCommand;
-use crate::protocol::list::rpush::RPushCommand;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -182,7 +182,7 @@ impl Display for ClientFlag {
         if self.blocking {
             flags.push('b');
         }
-        // Redis 的规则：没有其它 flag 时显示 N
+        // Redis rule: Display N when there are no other flags
         if flags.is_empty() {
             flags.push('N');
         }

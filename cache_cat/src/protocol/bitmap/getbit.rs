@@ -2,15 +2,15 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::{RaftCommand, ReadRaftCommand};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::ValueObject;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetBitParams {
@@ -61,51 +61,15 @@ impl GetBitCommand {
             return Err(ProtocolError::WrongArgCount("getbit"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("rename")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("getbit"))?;
 
-        let offset = match &items[2] {
-            Value::BulkString(Some(data)) => {
-                let s = String::from_utf8_lossy(data);
-                match s.parse::<u64>() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Err(ProtocolError::Custom(
-                            "ERR bit offset is not an integer or out of range",
-                        ));
-                    }
-                }
-            }
-            Value::SimpleString(s) => match s.parse::<u64>() {
-                Ok(v) => v,
-                Err(_) => {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit offset is not an integer or out of range",
-                    ));
-                }
-            },
-            Value::Integer(i) => {
-                if *i < 0 {
-                    return Err(ProtocolError::Custom(
-                        "ERR bit offset is not an integer or out of range",
-                    ));
-                }
-                *i as u64
-            }
-            _ => {
-                return Err(ProtocolError::Custom(
-                    "ERR bit offset is not an integer or out of range",
-                ));
-            }
-        };
+        let offset = items[2].parse_u64().ok_or(ProtocolError::Custom(
+            "ERR bit offset is not an integer or out of range",
+        ))?;
 
-        Ok(GetBitParams {
-            key: key.into(),
-            offset,
-        })
+        Ok(GetBitParams { key, offset })
     }
 }
 

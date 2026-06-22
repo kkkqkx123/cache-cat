@@ -2,15 +2,15 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::{RaftCommand, ReadRaftCommand};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::ValueObject;
 
 /// Parameters for STRLEN command
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,16 +30,13 @@ impl StrLenParams {
             return Err(ProtocolError::WrongArgCount("STRLEN"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(Self { key: key.into() })
+        Ok(Self { key })
     }
 }
-
 
 /// STRLEN command executor
 pub struct StrLenCommand;
@@ -61,7 +58,6 @@ impl ReadCommand for StrLenParams {
         Value::Integer(len as i64)
     }
 }
-
 
 impl ReadRaftCommand for StrLenCommand {
     fn read_operation(&self, items: &[Value]) -> Result<ReadOperation, ProtocolError> {

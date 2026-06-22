@@ -3,11 +3,12 @@ use crate::protocol::command::{Client, Command};
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
+use bytes::Bytes;
 
 /// Parsed PING arguments
 #[derive(Debug)]
 pub struct PingParam {
-    pub message: Option<Vec<u8>>,
+    pub message: Option<Bytes>,
 }
 
 /// PING command handler
@@ -31,11 +32,11 @@ impl PingParam {
                     }
                     Value::SimpleString(s) => {
                         // Simple string, convert to bytes
-                        Some(s.as_bytes().to_vec())
+                        Some(s.clone().into())
                     }
                     Value::Integer(i) => {
                         // Integer, convert to string representation
-                        Some(i.to_string().into_bytes())
+                        Some(i.to_string().into())
                     }
                     _ => {
                         return Err(ProtocolError::InvalidArgument(

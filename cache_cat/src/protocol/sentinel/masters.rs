@@ -3,6 +3,7 @@ use crate::protocol::command::{Client, SubCommand};
 use crate::raft::network::redis_server::RedisServer;
 use crate::raft::types::core::response_value::Value;
 use async_trait::async_trait;
+use bytes::Bytes;
 
 // SENTINEL MASTERS
 pub struct SentinelMastersCommand;
@@ -29,25 +30,23 @@ impl SubCommand for SentinelMastersCommand {
 
         let mut result = Vec::new();
         let mut master_info = Vec::new();
-        master_info.push(Value::BulkString(Some(b"name".to_vec())));
-        master_info.push(Value::BulkString(Some(master_name.into_bytes())));
-        master_info.push(Value::BulkString(Some(b"ip".to_vec())));
-        master_info.push(Value::BulkString(Some(endpoint.addr().as_bytes().to_vec())));
-        master_info.push(Value::BulkString(Some(b"port".to_vec())));
+        master_info.push(Value::BulkString(Some(Bytes::from_static(b"name"))));
+        master_info.push(Value::BulkString(Some(master_name.into())));
+        master_info.push(Value::BulkString(Some(Bytes::from_static(b"ip"))));
+        master_info.push(Value::BulkString(Some(endpoint.addr().to_string().into())));
+        master_info.push(Value::BulkString(Some(Bytes::from_static(b"port"))));
         master_info.push(Value::BulkString(Some(
-            endpoint.redis_port().to_string().into_bytes(),
+            endpoint.redis_port().to_string().into(),
         )));
-        master_info.push(Value::BulkString(Some(b"flags".to_vec())));
-        master_info.push(Value::BulkString(Some(flags.to_string().as_bytes().to_vec())));
+        master_info.push(Value::BulkString(Some(Bytes::from_static(b"flags"))));
+        master_info.push(Value::BulkString(Some(flags.to_string().into())));
 
-        master_info.push(Value::BulkString(Some(b"num-other-sentinels".to_vec())));
-        master_info.push(Value::BulkString(Some(
-            nodes_num.to_string().as_bytes().to_vec(),
-        )));
+        master_info.push(Value::BulkString(Some(Bytes::from_static(
+            b"num-other-sentinels",
+        ))));
+        master_info.push(Value::BulkString(Some(nodes_num.to_string().into())));
 
         result.push(Value::Array(Some(master_info)));
-
-
 
         Ok(Value::Array(Some(result)))
     }

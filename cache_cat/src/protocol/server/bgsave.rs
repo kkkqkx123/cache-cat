@@ -41,12 +41,12 @@ impl Command for BgsaveCommand {
             .await
             .snapshot_state();
         if snapshot_state && (!schedule) {
-            //如果已经在快照中了
+            // If it is already in the snapshot
             return Err(ProtocolError::Custom("Background save already in progress").into());
         }
         let mut receiver = server.app.state_machine.data.snapshot_message.subscribe();
         server.app.cluster.trigger_snapshot().await?;
-        //在快照执行完毕之后再执行一次
+        // Execute again after the snapshot is completed
         if schedule && snapshot_state {
             let app = server.app.clone();
             tokio::task::spawn(async move {

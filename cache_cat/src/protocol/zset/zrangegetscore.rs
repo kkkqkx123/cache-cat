@@ -84,11 +84,9 @@ impl ZRangeByScoreCommand {
         }
 
         // Parse key
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         // Parse min score
         let min = Self::parse_score(&items[2])?;
@@ -103,16 +101,12 @@ impl ZRangeByScoreCommand {
         if items.len() > 4 {
             let mut i = 4;
             while i < items.len() {
-                let flag = match &items[i] {
-                    Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_uppercase(),
-                    Value::SimpleString(s) => s.to_uppercase(),
-                    _ => {
-                        i += 1;
-                        continue;
-                    }
+                let Some(flag) = items[i].as_str_lossy() else {
+                    i += 1;
+                    continue;
                 };
 
-                match flag.as_str() {
+                match flag.to_uppercase().as_str() {
                     "WITHSCORES" => {
                         with_scores = true;
                         i += 1;
@@ -137,7 +131,7 @@ impl ZRangeByScoreCommand {
         }
 
         Ok(ZRangeByScoreParams {
-            key: key.into(),
+            key,
             min,
             max,
             with_scores,

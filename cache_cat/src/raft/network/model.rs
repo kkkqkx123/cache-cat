@@ -1,6 +1,7 @@
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::file_operator::FileOperator;
 use crate::raft::types::raft_types::{Node, TypeConfig};
+use bytes::Bytes;
 use openraft::SnapshotMeta;
 use openraft::alias::VoteOf;
 use openraft::raft::{AppendEntriesRequest, VoteRequest};
@@ -9,8 +10,8 @@ use std::hash::Hasher;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct PublishReq {
-    pub message: Vec<u8>,
-    pub channel: Vec<u8>,
+    pub message: Bytes,
+    pub channel: Bytes,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -31,7 +32,7 @@ pub struct GetReq {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetRes {
-    // Arc<Vec<u8>> 在 serde 中有实现（在 std/alloc 可用的情况下）
+    // Arc<Vec<u8>> is implemented in serde (when std/alloc is available)
     pub value: Value,
 }
 

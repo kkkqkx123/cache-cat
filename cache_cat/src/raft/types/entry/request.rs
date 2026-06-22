@@ -36,14 +36,14 @@ impl Request {
 
     #[inline]
     pub fn set_write_clock(&mut self, high_bits: u64) {
-        let masked = high_bits << 16; // 高48位移到高位
+        let masked = high_bits << 16; // 48 high displacement to high position
         self.number = (self.number & 0xFFFF) | (masked & 0xFFFFFFFFFFFF0000);
     }
 
     #[inline]
     pub fn split_u64(&self) -> (u64, u16) {
-        let high_48: u64 = self.number >> 16; // 取高 48 位作为当前时间戳毫秒值
-        let low_16: u16 = (self.number & 0xFFFF) as u16; // 取低 16 位作为数据库编号
+        let high_48: u64 = self.number >> 16; // Take the highest 48 bits as the current timestamp value in milliseconds
+        let low_16: u16 = (self.number & 0xFFFF) as u16; // Take the lower 16 digits as the database number
         (high_48, low_16)
     }
 

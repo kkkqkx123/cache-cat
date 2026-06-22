@@ -22,7 +22,7 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BaseOperation {
-    // 只是用来推动时钟
+    // Just used to push the clock
     Empty,
     // key
     Del(DelReq),

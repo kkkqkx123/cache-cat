@@ -2,6 +2,7 @@ use bytes::Bytes;
 use cache_cat::config::cli_arg::load_config_with_cli;
 use cache_cat::config::config::Config;
 use cache_cat::node::raft_builder::RaftNodeBuilder;
+use cache_cat::protocol::string::set::SetReq;
 use cache_cat::raft::types::entry::bae_operation::BaseOperation::Set;
 use cache_cat::raft::types::entry::request::{Operation, Request};
 use cache_cat::raft::types::raft_types::CacheCatApp;
@@ -11,7 +12,6 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::time::sleep;
 use tracing::{error, info};
-use cache_cat::protocol::string::set::SetReq;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -72,7 +72,7 @@ async fn benchmark_requests(apps: Arc<CacheCatApp>) {
                     0,
                     Operation::Base(Set(SetReq {
                         key: Bytes::from_owner((num).to_be_bytes().to_vec()),
-                        value: Arc::from(Vec::from(format!("value_{}", i))),
+                        value: Bytes::from_owner(format!("value_{}", i)),
                         ex_time: 0,
                     })),
                 );

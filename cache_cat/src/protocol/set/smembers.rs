@@ -2,15 +2,15 @@ use crate::error::{CacheCatError, ProtocolError};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::{RaftCommand, ReadRaftCommand};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::mocha::MyValue;
+use crate::raft::types::core::mocha::read_command::ReadCommand;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
 use crate::raft::types::entry::read_operation::ReadOperation;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::mocha::read_command::ReadCommand;
-use crate::raft::types::core::value_object::ValueObject;
 
 pub struct SMembersCommand;
 
@@ -40,10 +40,12 @@ impl ReadCommand for SMembersParams {
             Some(v) => match v.data {
                 ValueObject::Set(set) => {
                     let guard = set.lock();
-                    let mut array = Vec::new();
-                    for member in guard.iter() {
-                        array.push(Value::BulkString(Some(member.as_ref().clone())));
-                    }
+
+                    let array = guard
+                        .iter()
+                        .map(|v| Value::BulkString(Some(v.clone())))
+                        .collect::<Vec<_>>();
+
                     Value::Array(Some(array))
                 }
                 _ => ProtocolError::WrongType.into(),
@@ -58,13 +60,11 @@ impl SMembersCommand {
             return Err(ProtocolError::WrongArgCount("smembers"));
         }
 
-        let key = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(SMembersParams { key: key.into() })
+        Ok(SMembersParams { key })
     }
 }
 

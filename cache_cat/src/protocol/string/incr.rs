@@ -1,20 +1,20 @@
 use crate::error::{CacheCatError, ProtocolError};
+use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::command::{Client, Command};
 use crate::protocol::raft_command::RaftCommand;
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::types::core::mocha::cas::ComputeCommand;
+use crate::raft::types::core::mocha::mocha::MyValue;
 use crate::raft::types::core::response_value::Value;
+use crate::raft::types::core::value_object::ValueObject;
+use crate::raft::types::entry::bae_operation::BaseOperation;
 use crate::raft::types::entry::bae_operation::BaseOperation::Incr;
-use crate::raft::types::entry::bae_operation::{BaseOperation};
 use crate::raft::types::entry::request::Operation;
+use crate::utils::parse_i64;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
-use crate::raft::types::core::mocha::cas::ComputeCommand;
-use crate::raft::types::core::mocha::mocha::MyValue;
-use crate::raft::types::core::value_object::ValueObject;
-use crate::utils::parse_i64;
 
 /// Parameters for INCR command
 #[derive(Debug, Clone, PartialEq)]
@@ -28,13 +28,11 @@ impl IncrParams {
             return Err(ProtocolError::WrongArgCount("INCR"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        Ok(IncrParams { key: key.into() })
+        Ok(IncrParams { key })
     }
 }
 
@@ -83,7 +81,6 @@ impl fmt::Display for IncrReq {
         )
     }
 }
-
 
 impl ComputeCommand for IncrReq {
     fn key(&self) -> &Bytes {

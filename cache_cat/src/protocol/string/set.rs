@@ -16,7 +16,6 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
-use std::sync::Arc;
 
 /// Expiration time options for SET command
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -51,7 +50,7 @@ pub struct SetParams {
     /// The key to set
     pub key: Bytes,
     /// The value to set
-    pub value: Vec<u8>,
+    pub value: Bytes,
     /// NX or XX mode (optional)
     pub mode: Option<SetMode>,
     /// Whether to return the previous value (GET option)
@@ -73,7 +72,7 @@ impl Display for SetParams {
 
 impl SetParams {
     /// Create a new SetParams with minimal required fields
-    pub fn new(key: impl Into<Bytes>, value: impl Into<Vec<u8>>) -> Self {
+    pub fn new(key: impl Into<Bytes>, value: impl Into<Bytes>) -> Self {
         Self {
             key: key.into(),
             value: value.into(),
@@ -91,28 +90,23 @@ impl SetParams {
             return Err(ProtocolError::WrongArgCount("set"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
-        let value = match &items[2] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("value")),
-        };
+        let value = items[2]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("value"))?;
 
         let mut params = SetParams::new(key, value);
         let mut i = 3;
 
         // Parse optional arguments
         while i < items.len() {
-            let arg = match &items[i] {
-                Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_uppercase(),
-                Value::SimpleString(s) => s.to_uppercase(),
-                _ => return Err(ProtocolError::SyntaxError),
-            };
+            let arg = items[i]
+                .as_str_lossy()
+                .ok_or(ProtocolError::SyntaxError)?
+                .to_uppercase();
 
             match arg.as_str() {
                 "NX" => {
@@ -137,7 +131,7 @@ impl SetParams {
                     if params.expiration.is_some() || i + 1 >= items.len() {
                         return Err(ProtocolError::SyntaxError);
                     }
-                    let seconds = parse_u64(&items[i + 1])?;
+                    let seconds = items[i + 1].try_parse_u64()?;
                     params.expiration = Some(Expiration::Ex(seconds));
                     i += 2;
                 }
@@ -145,7 +139,7 @@ impl SetParams {
                     if params.expiration.is_some() || i + 1 >= items.len() {
                         return Err(ProtocolError::SyntaxError);
                     }
-                    let milliseconds = parse_u64(&items[i + 1])?;
+                    let milliseconds = items[i + 1].try_parse_u64()?;
                     params.expiration = Some(Expiration::Px(milliseconds));
                     i += 2;
                 }
@@ -153,7 +147,7 @@ impl SetParams {
                     if params.expiration.is_some() || i + 1 >= items.len() {
                         return Err(ProtocolError::SyntaxError);
                     }
-                    let timestamp = parse_u64(&items[i + 1])?;
+                    let timestamp = items[i + 1].try_parse_u64()?;
                     params.expiration = Some(Expiration::ExAt(timestamp));
                     i += 2;
                 }
@@ -161,7 +155,7 @@ impl SetParams {
                     if params.expiration.is_some() || i + 1 >= items.len() {
                         return Err(ProtocolError::SyntaxError);
                     }
-                    let timestamp = parse_u64(&items[i + 1])?;
+                    let timestamp = items[i + 1].try_parse_u64()?;
                     params.expiration = Some(Expiration::PxAt(timestamp));
                     i += 2;
                 }
@@ -177,18 +171,6 @@ impl SetParams {
         }
 
         Ok(params)
-    }
-}
-
-/// Parse a Value as u64
-fn parse_u64(value: &Value) -> Result<u64, ProtocolError> {
-    match value {
-        Value::BulkString(Some(data)) => String::from_utf8_lossy(data)
-            .parse::<u64>()
-            .map_err(|_| ProtocolError::NotAnInteger),
-        Value::SimpleString(s) => s.parse::<u64>().map_err(|_| ProtocolError::NotAnInteger),
-        Value::Integer(i) if *i >= 0 => Ok(*i as u64),
-        _ => Err(ProtocolError::NotAnInteger),
     }
 }
 
@@ -227,7 +209,7 @@ impl Command for SetCommand {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SetReq {
     pub key: Bytes,
-    pub value: Arc<Vec<u8>>,
+    pub value: Bytes,
     pub ex_time: u64,
 }
 

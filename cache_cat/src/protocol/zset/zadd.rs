@@ -27,7 +27,7 @@ pub struct ZAddParam {
     pub gt: bool,
     pub lt: bool,
     pub ch: bool,
-    pub members: Vec<(Vec<u8>, f64)>,
+    pub members: Vec<(Bytes, f64)>,
 }
 
 impl Display for ZAddParam {
@@ -55,11 +55,9 @@ impl ZAddCommand {
             return Err(ProtocolError::WrongArgCount("zadd"));
         }
 
-        let key: Vec<u8> = match &items[1] {
-            Value::BulkString(Some(data)) => data.clone(),
-            Value::SimpleString(s) => s.as_bytes().to_vec(),
-            _ => return Err(ProtocolError::InvalidArgument("key")),
-        };
+        let key = items[1]
+            .string_bytes_clone()
+            .ok_or(ProtocolError::InvalidArgument("key"))?;
 
         let mut nx = false;
         let mut xx = false;
@@ -70,10 +68,8 @@ impl ZAddCommand {
         // Parse flags from items[2..] until we hit a score (number)
         let mut i = 2;
         while i < items.len() {
-            let flag = match &items[i] {
-                Value::BulkString(Some(data)) => String::from_utf8_lossy(data).to_string(),
-                Value::SimpleString(s) => s.clone(),
-                _ => break,
+            let Some(flag) = items[i].as_str_lossy() else {
+                break;
             };
 
             match flag.to_uppercase().as_str() {
@@ -122,35 +118,21 @@ impl ZAddCommand {
         let mut members = Vec::with_capacity(remaining.len() / 2);
         let mut j = 0;
         while j < remaining.len() {
-            let score = match &remaining[j] {
-                Value::BulkString(Some(data)) => {
-                    let s = String::from_utf8_lossy(data);
-                    match s.parse::<f64>() {
-                        Ok(v) => v,
-                        Err(_) => {
-                            return Err(ProtocolError::Custom("ERR value is not a valid float"));
-                        }
-                    }
-                }
-                Value::SimpleString(s) => match s.parse::<f64>() {
-                    Ok(v) => v,
-                    Err(_) => return Err(ProtocolError::Custom("ERR value is not a valid float")),
-                },
-                _ => return Err(ProtocolError::Custom("ERR value is not a valid float")),
-            };
+            let score = remaining[j]
+                .as_str_lossy()
+                .and_then(|v| v.parse::<f64>().ok())
+                .ok_or(ProtocolError::Custom("ERR value is not a valid float"))?;
 
-            let member = match &remaining[j + 1] {
-                Value::BulkString(Some(data)) => data.clone(),
-                Value::SimpleString(s) => s.as_bytes().to_vec(),
-                _ => return Err(ProtocolError::InvalidArgument("member")),
-            };
+            let member = remaining[j + 1]
+                .string_bytes_clone()
+                .ok_or(ProtocolError::InvalidArgument("member"))?;
 
             members.push((member, score));
             j += 2;
         }
 
         Ok(ZAddParam {
-            key: key.into(),
+            key,
             nx,
             xx,
             gt,
@@ -166,13 +148,11 @@ impl ZAddCommand {
         s.parse::<f64>().ok()
     }
 }
+
 impl RaftCommand for ZAddCommand {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError> {
         let params = Self::parse_params(items)?;
-        let mut elements = Vec::new();
-        for v in params.members {
-            elements.push((Arc::new(v.0), v.1));
-        }
+
         Ok(Operation::Base(ZAdd(ZAddReq {
             key: params.key,
             nx: params.nx,
@@ -180,7 +160,7 @@ impl RaftCommand for ZAddCommand {
             gt: params.gt,
             lt: params.lt,
             ch: params.ch,
-            members: elements,
+            members: params.members,
         })))
     }
 }
@@ -208,7 +188,7 @@ pub struct ZAddReq {
     pub gt: bool,
     pub lt: bool,
     pub ch: bool,
-    pub members: Vec<(Arc<Vec<u8>>, f64)>,
+    pub members: Vec<(Bytes, f64)>,
 }
 
 impl fmt::Display for ZAddReq {

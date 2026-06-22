@@ -29,10 +29,10 @@ impl Command for SaveCommand {
             .await
             .snapshot_state();
         if snapshot_state {
-            //如果已经在快照中了
+            // If it is already in the snapshot
             return Err(ProtocolError::Custom("Background save already in progress").into());
         }
-        //进行快照
+        // Take a snapshot
         let mut receiver = server.app.state_machine.data.snapshot_message.subscribe();
         server.app.cluster.trigger_snapshot().await?;
         let _ = receiver.recv().await;
