@@ -7,17 +7,23 @@ redis_port = 6379
 cleaning_interval = 100
 databases = 16
 #requirepass = "123"
+tls_port = 6479
 [raft]
 address = "127.0.0.1:5001"
 advertise_host = "127.0.0.1"
 single = true
 join = []
-
 log_path = "C:/tmp/raft/cache-cat/1"
-
 #选举超时时间，节点之间的时钟偏移不能超过该值 需要大于500
 election_timeout = 799
 #超过这个值将会直接进行快照，为0代表用不快照
 snapshot_policy = 5000000
 #超过这个阈值表示严重落后，主节点会将快照发给从节点，而不是增量同步。需要大于snapshot_policy,防止快照还没生成。
 replication_lag_threshold = 50000000
+[tls]
+tls_cert_file = "C:/temp/ca/redis.crt"
+tls_key_file = "C:/temp/ca/redis.key"
+tls_ca_cert_file = "C:/temp/ca/ca.crt"
+tls_auth_clients = true
+tls_protocols = "TLSv1.2 TLSv1.3"
+tls_replication = false

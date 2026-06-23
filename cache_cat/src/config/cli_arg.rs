@@ -22,7 +22,7 @@ pub struct CliArgs {
 
     // Redis 配置
     /// Redis 端口
-    #[arg(long = "redis-port")]
+    #[arg(long = "redis_port")]
     pub redis_port: Option<u32>,
 
     /// Redis 密码
@@ -73,6 +73,35 @@ pub struct CliArgs {
     /// 复制滞后阈值（日志条目数）
     #[arg(long = "replication_lag_threshold")]
     pub raft_replication_lag_threshold: Option<u64>,
+
+    // TLS 配置
+    /// TLS 监听端口
+    #[arg(long = "tls_port")]
+    pub tls_port: Option<u32>,
+
+    /// 服务端证书文件路径
+    #[arg(long = "tls_cert_file")]
+    pub tls_cert_file: Option<String>,
+
+    /// 服务端私钥文件路径
+    #[arg(long = "tls_key_file")]
+    pub tls_key_file: Option<String>,
+
+    /// CA 证书文件路径
+    #[arg(long = "tls_ca_cert_file")]
+    pub tls_ca_cert_file: Option<String>,
+
+    /// 是否要求客户端证书
+    #[arg(long = "tls_auth_clients")]
+    pub tls_auth_clients: Option<bool>,
+
+    /// TLS 协议版本（例如 "TLSv1.2 TLSv1.3"）
+    #[arg(long = "tls_protocols")]
+    pub tls_protocols: Option<String>,
+
+    /// Raft 复制是否启用 TLS
+    #[arg(long = "tls_replication")]
+    pub tls_replication: Option<bool>,
 }
 
 /// 合并配置：配置文件（可选） + 命令行覆盖
@@ -80,7 +109,8 @@ pub fn load_config_with_cli() -> Result<Config, Box<dyn std::error::Error>> {
     let cli = CliArgs::parse();
     // 基础配置：如果提供了配置文件则加载，否则使用默认 Config
     let mut config = if let Some(path) = &cli.config {
-        let path_str = path.to_str()
+        let path_str = path
+            .to_str()
             .ok_or_else(|| format!("Invalid config file path: {:?}", path))?;
         load_config(path_str)?
     } else {
@@ -133,6 +163,29 @@ pub fn load_config_with_cli() -> Result<Config, Box<dyn std::error::Error>> {
     }
     if let Some(v) = cli.raft_replication_lag_threshold {
         config.raft.replication_lag_threshold = v;
+    }
+
+    // TLS 配置覆盖
+    if let Some(v) = cli.tls_port {
+        config.tls.tls_port = Some(v);
+    }
+    if let Some(v) = cli.tls_cert_file {
+        config.tls.tls_cert_file = Some(v);
+    }
+    if let Some(v) = cli.tls_key_file {
+        config.tls.tls_key_file = Some(v);
+    }
+    if let Some(v) = cli.tls_ca_cert_file {
+        config.tls.tls_ca_cert_file = Some(v);
+    }
+    if let Some(v) = cli.tls_auth_clients {
+        config.tls.tls_auth_clients = Some(v);
+    }
+    if let Some(v) = cli.tls_protocols {
+        config.tls.tls_protocols = Some(v);
+    }
+    if let Some(v) = cli.tls_replication {
+        config.tls.tls_replication = Some(v);
     }
 
     // 验证配置

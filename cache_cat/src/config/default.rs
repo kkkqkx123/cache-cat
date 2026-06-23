@@ -1,4 +1,4 @@
-use crate::config::config::{RaftConfig, RedisConfig};
+use crate::config::config::{RaftConfig, RedisConfig, TlsConfig};
 
 pub fn default_raft_config() -> RaftConfig {
     RaftConfig {
@@ -23,5 +23,17 @@ pub fn default_redis_config() -> RedisConfig {
         cleaning_interval: 10,
         sentinel_master_name: "cat".to_string(),
         databases: 16,
+    }
+}
+
+pub fn default_tls_config() -> TlsConfig {
+    TlsConfig {
+        tls_port: None,
+        tls_cert_file: None,
+        tls_key_file: None,
+        tls_ca_cert_file: None,
+        tls_auth_clients: None,
+        tls_protocols: None,
+        tls_replication: None,
     }
 }

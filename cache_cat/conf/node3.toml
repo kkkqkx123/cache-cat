@@ -7,6 +7,7 @@ redis_port = 6381
 cleaning_interval = 100
 databases = 16
 #requirepass = "123"
+tls_port = 6481
 [raft]
 address = "127.0.0.1:5003"
 advertise_host = "127.0.0.1"
@@ -22,3 +23,10 @@ snapshot_policy = 5000000
 #超过这个阈值表示严重落后，主节点会将快照发给从节点，而不是增量同步。需要大于snapshot_policy,防止快照还没生成。
 replication_lag_threshold = 50000000
 
+[tls]
+tls_cert_file = "C:/temp/ca/redis.crt"
+tls_key_file = "C:/temp/ca/redis.key"
+tls_ca_cert_file = "C:/temp/ca/ca.crt"
+tls_auth_clients = true
+tls_protocols = "TLSv1.2 TLSv1.3"
+tls_replication = false

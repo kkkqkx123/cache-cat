@@ -1,6 +1,7 @@
 use super::default::default_node_id;
 use super::default::default_raft_config;
 use super::default::default_redis_config;
+use super::default::default_tls_config;
 use crate::error::{Error, Result};
 use serde::Deserialize;
 use serde::Serialize;
@@ -18,6 +19,10 @@ pub struct Config {
 
     #[serde(default = "default_raft_config")]
     pub raft: RaftConfig,
+
+    /// TLS configuration (optional)
+    #[serde(default = "default_tls_config")]
+    pub tls: TlsConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
@@ -52,11 +57,39 @@ pub struct RaftConfig {
 
     /// 选举超时时间，节点之间的时钟偏移不能超过该值 需要大于500
     pub election_timeout: u64,
-    /// 超过这个值将会直接进行快照，为0代表用不快照
+
+    /// 超过这个值将会直接进行快照，为0代表不用快照
     pub snapshot_policy: u64,
 
     /// 超过这个阈值表示严重落后，需要大于snapshot_policy,防止快照还没生成。
     pub replication_lag_threshold: u64,
+}
+
+/// TLS configuration
+///
+/// 所有字段均允许为空
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct TlsConfig {
+    /// TLS监听端口
+    pub tls_port: Option<u32>,
+
+    /// 服务端证书
+    pub tls_cert_file: Option<String>,
+
+    /// 服务端私钥
+    pub tls_key_file: Option<String>,
+
+    /// CA证书
+    pub tls_ca_cert_file: Option<String>,
+
+    /// 是否要求客户端证书
+    pub tls_auth_clients: Option<bool>,
+
+    /// TLS协议版本，例如 "TLSv1.2 TLSv1.3"
+    pub tls_protocols: Option<String>,
+
+    /// Raft复制是否启用TLS
+    pub tls_replication: Option<bool>,
 }
 
 impl Config {
@@ -67,6 +100,7 @@ impl Config {
                 "'single' mode cannot be used together with 'join' configuration",
             ));
         }
+
         if self.raft.snapshot_policy != 0
             && self.raft.snapshot_policy > self.raft.replication_lag_threshold
         {
@@ -84,7 +118,7 @@ impl Config {
         Ok(())
     }
 }
-/// Load configuration from TOML file
+
 /// Load configuration from TOML file
 pub fn load_config(path: &str) -> StdResult<Config, Box<dyn std::error::Error>> {
     let config_str = fs::read_to_string(path)
