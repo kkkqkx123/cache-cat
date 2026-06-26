@@ -1,19 +1,18 @@
 use crate::error::CacheCatError;
 use crate::node::parsed_config::ParsedConfig;
-use crate::protocol::command::{Client, CommandFactory, Connection};
+use crate::protocol::command::{Client, CommandFactory};
 use crate::protocol::resp::Parser;
 use crate::raft::application::pub_sub::PubSub;
-use crate::raft::network::tls::load_tls_config;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::raft_types::CacheCatApp;
 use bytes::{Buf, BytesMut};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
-use tokio_util::codec::{Decoder, Encoder, Framed};
+use tokio_util::codec::{Decoder, Encoder};
 use tracing::{error, info};
+use crate::raft::network::connection::Connection;
 
 #[derive(Clone)]
 pub struct RedisServer {
@@ -72,22 +71,11 @@ impl RedisServer {
         app: Arc<CacheCatApp>,
         redis_addr: String,
         config: &ParsedConfig,
+        tls_acceptor: Option<TlsAcceptor>,
     ) -> Result<Self, CacheCatError> {
         let cmd_factory = Arc::new(CommandFactory::init());
         let broadcast = app.pubsub.clone();
 
-        // 构建TLS配置
-        let tls_acceptor =
-            if let (Some(cert), Some(key)) = (&config.tls_cert_file, &config.tls_key_file) {
-                match load_tls_config(cert, key, config, config.tls_protocols.as_deref()) {
-                    Ok(config) => Some(TlsAcceptor::from(config)),
-                    Err(e) => {
-                        return Err(e.into());
-                    }
-                }
-            } else {
-                None
-            };
         let tls_addr = config
             .tls_port
             .map(|port| format!("{}:{}", config.raft_endpoint.addr(), port));

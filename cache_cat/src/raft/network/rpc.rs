@@ -2,6 +2,8 @@ use crate::error::{CacheCatError, Error};
 use crate::node::parsed_config::ParsedConfig;
 use crate::raft::network::external_handler::{HANDLER_TABLE, write};
 use crate::raft::network::redis_server::RedisServer;
+use crate::raft::network::tls::load_tls_config;
+use crate::raft::network::connection::Connection;  // 新增导入
 use crate::raft::store::snapshot::snapshot_handler::get_snapshot_file_name;
 use crate::raft::types::entry::request::Request;
 use crate::raft::types::raft_types::CacheCatApp;
@@ -19,6 +21,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot::Sender;
+use tokio_rustls::TlsAcceptor;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -28,7 +31,9 @@ pub struct Server {
     pub addr: String,
     pub startup_tx: Sender<StdResult<(), String>>,
     pub redis_server: RedisServer,
+    pub tls_acceptor: Option<TlsAcceptor>,
 }
+
 impl Server {
     pub fn new(
         app: Arc<CacheCatApp>,
@@ -37,20 +42,34 @@ impl Server {
         redis_addr: String,
         config: &ParsedConfig,
     ) -> Result<Self, CacheCatError> {
-        let redis_server = match RedisServer::new(app.clone(), redis_addr, config) {
-            Ok(rs) => rs,
-            Err(e) => {
-                let _ = startup_tx.send(Err(format!("Failed to create RedisServer: {}", e)));
-                return Err(e);
-            }
-        };
+        let tls_acceptor =
+            if let (Some(cert), Some(key)) = (&config.tls_cert_file, &config.tls_key_file) {
+                match load_tls_config(cert, key, config, config.tls_protocols.as_deref()) {
+                    Ok(config) => Some(TlsAcceptor::from(config)),
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                }
+            } else {
+                None
+            };
+        let redis_server =
+            match RedisServer::new(app.clone(), redis_addr, config, tls_acceptor.clone()) {
+                Ok(rs) => rs,
+                Err(e) => {
+                    let _ = startup_tx.send(Err(format!("Failed to create RedisServer: {}", e)));
+                    return Err(e);
+                }
+            };
         Ok(Server {
             app,
             addr,
             startup_tx,
             redis_server,
+            tls_acceptor,
         })
     }
+
     pub async fn start_server(
         self: Self,
         mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
@@ -72,15 +91,16 @@ impl Server {
         };
         let _ = self.startup_tx.send(Ok(()));
         println!("Listening on: {}", listener.local_addr()?);
+
         loop {
             tokio::select! {
-                // 监听连接
                 res = listener.accept() => {
                     match res {
                         Ok((socket, peer_addr)) => {
                             let app = self.app.clone();
+                            let tls_acceptor = self.tls_acceptor.clone();  // 获取tls_acceptor
                             tokio::spawn(async move {
-                                if let Err(e) = handle_connection(app, socket, peer_addr).await {
+                                if let Err(e) = handle_connection(app, socket, peer_addr, tls_acceptor).await {
                                     error!("Error handling connection from {}: {}", peer_addr, e);
                                 }
                             });
@@ -88,56 +108,89 @@ impl Server {
                         Err(e) => error!("Accept error: {}", e),
                     }
                 }
-                // 监听关闭信号
                 _ = shutdown_rx.recv() => {
                     info!("Server loop stopping...");
-                    break; // 跳出循环，正常结束
+                    break;
                 }
             }
         }
         Ok(())
     }
 }
+
 async fn handle_connection(
     app: Arc<CacheCatApp>,
-    mut socket: TcpStream,
+    socket: TcpStream,
     peer_addr: SocketAddr,
+    tls_acceptor: Option<TlsAcceptor>,
 ) -> std::io::Result<()> {
     if let Err(e) = socket.set_nodelay(true) {
         warn!("Failed to set TCP_NODELAY for {}: {}", peer_addr, e);
     }
     debug!("New connection from {}", peer_addr);
+
+    // 根据app.config.tls_replication决定是否使用TLS
+    let mut connection = if app.config.tls_replication {
+        // 需要TLS连接
+        match tls_acceptor {
+            Some(acceptor) => {
+                // TLS模式：进行TLS握手
+                match acceptor.accept(socket).await {
+                    Ok(tls_stream) => {
+                        debug!("TLS handshake successful for {}", peer_addr);
+                        Connection::from(tls_stream)
+                    }
+                    Err(e) => {
+                        error!("TLS handshake failed for {}: {}", peer_addr, e);
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                    }
+                }
+            }
+            None => {
+                // 配置要求TLS但tls_acceptor为空，抛出错误
+                error!("TLS replication is enabled but TLS acceptor is not configured for {}", peer_addr);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "TLS replication is enabled but TLS acceptor is not configured"
+                ));
+            }
+        }
+    } else {
+        // 不需要TLS，直接使用普通TCP连接
+        Connection::from(socket)
+    };
+
     // 读取第一个字节识别模式
     let mut protocol_byte = [0u8; 1];
-    socket.read_exact(&mut protocol_byte).await?;
+    connection.read_exact(&mut protocol_byte).await?;
+
     if protocol_byte[0] == 0 {
         // RPC 模式
-        rpc_mode(app, socket, peer_addr).await;
+        rpc_mode(app, connection, peer_addr).await;
     } else if protocol_byte[0] == 1 {
         // Stream (Snapshot) 模式
-        stream_mode(app, socket, peer_addr).await?;
+        stream_mode(app, connection, peer_addr).await?;
     } else if protocol_byte[0] == 2 {
-        pipeline_mode(app, socket, peer_addr).await;
+        // Pipeline 模式
+        pipeline_mode(app, connection, peer_addr).await;
     }
 
     Ok(())
 }
 
-async fn pipeline_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAddr) {
+// 修改pipeline_mode以接受Connection而不是TcpStream
+async fn pipeline_mode(app: Arc<CacheCatApp>, connection: Connection, peer_addr: SocketAddr) {
     let codec = LengthDelimitedCodec::new();
-    let framed = Framed::new(socket, codec);
+    let framed = Framed::new(connection, codec);
     let (mut writer, mut reader) = framed.split();
 
     let mut pending_futures = FuturesOrdered::new();
     loop {
         tokio::select! {
-            // 1. 尝试从网络读取新的请求
-            // 注意：只有当 pending_futures 还没满时才读取，起到背压作用
             frame_result = reader.next(), if pending_futures.len() < 100 => {
                 match frame_result {
                     Some(Ok(frame_bytes)) => {
                         let request: Request = bincode2::deserialize(&frame_bytes).expect("Failed to deserialize");
-                        // 直接推进队列，不经过 channel
                         let future = write(app.clone(), request).boxed();
                         pending_futures.push_back(future);
                     }
@@ -145,12 +198,10 @@ async fn pipeline_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: Sock
                         error!("读取帧失败 ({}): {}", peer_addr, e);
                         break;
                     }
-                    None => break, // 连接关闭
+                    None => break,
                 }
             }
 
-            // 2. 检查是否有执行完的结果需要写回客户端
-            // FuturesOrdered 会保证即便 Future 执行快慢不一，返回顺序也和推入顺序一致
             Some(res) = pending_futures.next(), if !pending_futures.is_empty() => {
                 let encoded = bincode2::serialize(&res).unwrap();
                 if let Err(e) = writer.send(Bytes::from(encoded)).await {
@@ -159,15 +210,16 @@ async fn pipeline_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: Sock
                 }
             }
 
-            // 如果两端都关闭了，退出
             else => break,
         }
     }
     debug!("Pipeline mode ended for {}", peer_addr);
 }
-async fn rpc_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAddr) {
+
+// 修改rpc_mode以接受Connection而不是TcpStream
+async fn rpc_mode(app: Arc<CacheCatApp>, connection: Connection, peer_addr: SocketAddr) {
     let codec = LengthDelimitedCodec::new();
-    let framed = Framed::new(socket, codec);
+    let framed = Framed::new(connection, codec);
 
     let (writer, mut reader) = framed.split();
 
@@ -185,7 +237,8 @@ async fn rpc_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAdd
         }
         debug!("写任务结束: {}", peer_addr);
     });
-    // 读循环（完全复用）
+
+    // 读循环
     while let Some(frame_result) = reader.next().await {
         match frame_result {
             Ok(frame_bytes) => {
@@ -209,24 +262,20 @@ async fn rpc_mode(app: Arc<CacheCatApp>, socket: TcpStream, peer_addr: SocketAdd
     debug!("RPC读任务结束: {}", peer_addr);
 }
 
-/// hand 函数现在期望接收到的 `package` 已经是不带长度头的一帧数据（即：request_id(4) + func_id(4) + body）
-/// 并通过 tx 发送回写任务一个 payload（也不包含长度头），写任务会交给 codec 自动添加长度头。
+// hand函数保持不变
 pub async fn hand(
     app: Arc<CacheCatApp>,
     tx: UnboundedSender<Bytes>,
     mut package: Bytes,
 ) -> Result<(), CacheCatError> {
-    // 安全解析：至少需要 8 bytes (request_id + func_id)
     if package.len() < 8 {
         error!("Package length insufficient：{}", package.len());
         return Err(Error::internal("Insufficient package length".to_string()));
     }
 
-    // 使用 bytes 库的内置方法，减少手动切片和拷贝
-    let request_id = package.get_u32(); // 自动前进 4 字节
-    let func_id = package.get_u32(); // 自动再前进 4 字节
+    let request_id = package.get_u32();
+    let func_id = package.get_u32();
 
-    // 查找 handler 并调用
     let handler = HANDLER_TABLE
         .iter()
         .find(|(id, _)| *id == func_id)
@@ -236,59 +285,55 @@ pub async fn hand(
 
     let response_data = handler.internal_call(app, package).await?;
 
-    // 构造要发送给客户端的 payload：request_id(4) + response_data
     let mut payload = BytesMut::with_capacity(4 + response_data.len());
     payload.put_u32(request_id);
     payload.put(response_data);
 
-    // 发给写任务（注意：这里发送的是不含长度头的 payload，LengthDelimitedCodec 会自动在实际 socket 上写入长度头）
     if tx.send(payload.freeze()).is_err() {
-        // 写任务可能已结束或连接已关闭
         return Err(Error::internal("Write task has ended".to_string()));
     }
     Ok(())
 }
+
+// 修改stream_mode以接受Connection而不是TcpStream
 async fn stream_mode(
     app: Arc<CacheCatApp>,
-    mut socket: TcpStream,
+    mut connection: Connection,
     peer_addr: SocketAddr,
 ) -> std::io::Result<()> {
     let path = app.path.clone();
     let snapshot_dir = path.join("snapshot");
 
-    // 确保目录存在
     fs::create_dir_all(&snapshot_dir).await?;
     let mut buf = [0u8; 16];
-    socket.read_exact(&mut buf).await?;
+    connection.read_exact(&mut buf).await?;
     let uuid = Uuid::from_bytes(buf);
-    // 临时文件名
+
     let temp_filename = format!("hardlink_snapshot_{}.tmp", uuid);
     let final_filename = get_snapshot_file_name();
 
     let temp_path = snapshot_dir.join(&temp_filename);
     let final_path = snapshot_dir.join(&final_filename);
 
-    // 写入临时文件
     let mut file = File::create(&temp_path).await?;
     let mut buf = vec![0u8; 64 * 1024];
 
     loop {
-        let n = socket.read(&mut buf).await?;
+        let n = connection.read(&mut buf).await?;
         if n == 0 {
-            break; // 正常关闭
+            break;
         }
         file.write_all(&buf[..n]).await?;
     }
 
     file.flush().await?;
-    // 确保文件完全持久化,可能持续很长时间
     file.sync_all().await?;
     info!(
         "接收到来自{}的文件 文件接收完成: {}",
         peer_addr,
         final_path.to_string_lossy()
     );
-    //将生成的uuid返回给调用方
-    socket.write_all(uuid.as_bytes()).await?;
+
+    connection.write_all(uuid.as_bytes()).await?;
     Ok(())
 }
