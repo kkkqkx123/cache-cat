@@ -87,7 +87,9 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::watch;
-use tokio_rustls::server::TlsStream;
+use tokio_rustls::{
+    TlsStream, client::TlsStream as TlsClientStream, server::TlsStream as TlsServerStream,
+};
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
 
@@ -134,12 +136,9 @@ pub trait SubCommand: Send + Sync {
 pub trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncReadWrite for T {}
 
-// #[allow(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)]
 pub enum Connection {
     Tcp(TcpStream),
-
-    // NOTE: warn large enum variant,
-    // can use Box<TlsStream<TcpStream>>
     Tls(TlsStream<TcpStream>),
 }
 
@@ -250,6 +249,20 @@ impl From<TlsStream<TcpStream>> for Connection {
     #[inline]
     fn from(value: TlsStream<TcpStream>) -> Self {
         Self::Tls(value)
+    }
+}
+
+impl From<TlsServerStream<TcpStream>> for Connection {
+    #[inline]
+    fn from(value: TlsServerStream<TcpStream>) -> Self {
+        Self::Tls(TlsStream::Server(value))
+    }
+}
+
+impl From<TlsClientStream<TcpStream>> for Connection {
+    #[inline]
+    fn from(value: TlsClientStream<TcpStream>) -> Self {
+        Self::Tls(TlsStream::Client(value))
     }
 }
 
