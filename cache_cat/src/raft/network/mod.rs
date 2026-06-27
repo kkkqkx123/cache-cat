@@ -7,4 +7,4 @@ pub mod pipeline_client;
 pub mod redis_server;
 pub mod router;
 pub mod rpc;
-mod tls;
+pub mod tls;

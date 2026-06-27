@@ -1,9 +1,8 @@
 use crate::error::{CacheCatError, Error};
 use crate::node::parsed_config::ParsedConfig;
+use crate::raft::network::connection::Connection;
 use crate::raft::network::external_handler::{HANDLER_TABLE, write};
 use crate::raft::network::redis_server::RedisServer;
-use crate::raft::network::tls::load_tls_config;
-use crate::raft::network::connection::Connection;  // 新增导入
 use crate::raft::store::snapshot::snapshot_handler::get_snapshot_file_name;
 use crate::raft::types::entry::request::Request;
 use crate::raft::types::raft_types::CacheCatApp;
@@ -31,7 +30,6 @@ pub struct Server {
     pub addr: String,
     pub startup_tx: Sender<StdResult<(), String>>,
     pub redis_server: RedisServer,
-    pub tls_acceptor: Option<TlsAcceptor>,
 }
 
 impl Server {
@@ -42,31 +40,18 @@ impl Server {
         redis_addr: String,
         config: &ParsedConfig,
     ) -> Result<Self, CacheCatError> {
-        let tls_acceptor =
-            if let (Some(cert), Some(key)) = (&config.tls_cert_file, &config.tls_key_file) {
-                match load_tls_config(cert, key, config, config.tls_protocols.as_deref()) {
-                    Ok(config) => Some(TlsAcceptor::from(config)),
-                    Err(e) => {
-                        return Err(e.into());
-                    }
-                }
-            } else {
-                None
-            };
-        let redis_server =
-            match RedisServer::new(app.clone(), redis_addr, config, tls_acceptor.clone()) {
-                Ok(rs) => rs,
-                Err(e) => {
-                    let _ = startup_tx.send(Err(format!("Failed to create RedisServer: {}", e)));
-                    return Err(e);
-                }
-            };
+        let redis_server = match RedisServer::new(app.clone(), redis_addr, config) {
+            Ok(rs) => rs,
+            Err(e) => {
+                let _ = startup_tx.send(Err(format!("Failed to create RedisServer: {}", e)));
+                return Err(e);
+            }
+        };
         Ok(Server {
             app,
             addr,
             startup_tx,
             redis_server,
-            tls_acceptor,
         })
     }
 
@@ -98,7 +83,7 @@ impl Server {
                     match res {
                         Ok((socket, peer_addr)) => {
                             let app = self.app.clone();
-                            let tls_acceptor = self.tls_acceptor.clone();  // 获取tls_acceptor
+                            let tls_acceptor = self.app.tls_context.acceptor_for_cluster();  // 获取tls_acceptor
                             tokio::spawn(async move {
                                 if let Err(e) = handle_connection(app, socket, peer_addr, tls_acceptor).await {
                                     error!("Error handling connection from {}: {}", peer_addr, e);
@@ -148,10 +133,13 @@ async fn handle_connection(
             }
             None => {
                 // 配置要求TLS但tls_acceptor为空，抛出错误
-                error!("TLS replication is enabled but TLS acceptor is not configured for {}", peer_addr);
+                error!(
+                    "TLS replication is enabled but TLS acceptor is not configured for {}",
+                    peer_addr
+                );
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "TLS replication is enabled but TLS acceptor is not configured"
+                    "TLS replication is enabled but TLS acceptor is not configured",
                 ));
             }
         }

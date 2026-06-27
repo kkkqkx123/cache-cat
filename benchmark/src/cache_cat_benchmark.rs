@@ -108,7 +108,7 @@ pub async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(">>> 初始化连接池: {} 个连接 <<<", max_connections);
 
     let client = Arc::new(
-        RpcMultiClient::connect_with_num(&args.endpoints, max_connections)
+        RpcMultiClient::connect_with_num(&args.endpoints, max_connections, None)
             .await
             .expect("连接失败，请检查端点是否可用"),
     );

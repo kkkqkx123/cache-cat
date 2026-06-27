@@ -16,11 +16,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tokio::io::AsyncWriteExt;
+use rustls::pki_types::ServerName;
+use tokio::io::{AsyncWriteExt, AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::sync::{RwLock, mpsc};
 use tokio::time::timeout;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tokio_rustls::TlsConnector;
 
 // --- 槽位管理器配置 ---
 const MAX_PENDING: usize = 65536; // 必须是 2 的幂
@@ -87,11 +89,23 @@ impl SlotTable {
 }
 
 // --- RPC 核心实现 ---
-#[derive(Default)]
 pub struct RpcMultiClient {
     clients: Vec<Arc<RwLock<RpcClient>>>,
     next_client: AtomicU32,
     pub addr: String,
+    // 保存 TLS 配置以便在重连时使用
+    tls_connector: Option<TlsConnector>,
+}
+
+impl Default for RpcMultiClient {
+    fn default() -> Self {
+        Self {
+            clients: Vec::new(),
+            next_client: AtomicU32::new(0),
+            addr: String::new(),
+            tls_connector: None,
+        }
+    }
 }
 
 impl Clone for RpcMultiClient {
@@ -100,37 +114,44 @@ impl Clone for RpcMultiClient {
             addr: self.addr.clone(),
             clients: self.clients.clone(),
             next_client: AtomicU32::new(0),
+            tls_connector: self.tls_connector.clone(),
         }
     }
 }
 
 impl RpcMultiClient {
-    pub async fn connect(addr: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn connect(
+        addr: &str,
+        tls_connector: Option<TlsConnector>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let mut clients = Vec::new();
         for _ in 0..TCP_CONNECT_NUM {
-            let client = RpcClient::connect(addr).await?;
+            let client = RpcClient::connect(addr, tls_connector.clone()).await?;
             clients.push(Arc::new(RwLock::new(client)));
         }
         Ok(Self {
             addr: addr.to_string(),
             clients,
             next_client: AtomicU32::new(0),
+            tls_connector,
         })
     }
 
     pub async fn connect_with_num(
         addr: &str,
         connect_num: usize,
+        tls_connector: Option<TlsConnector>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let mut clients = Vec::new();
         for _ in 0..connect_num {
-            let client = RpcClient::connect(addr).await?;
+            let client = RpcClient::connect(addr, tls_connector.clone()).await?;
             clients.push(Arc::new(RwLock::new(client)));
         }
         Ok(Self {
             addr: addr.to_string(),
             clients,
             next_client: AtomicU32::new(0),
+            tls_connector,
         })
     }
 
@@ -157,8 +178,8 @@ impl RpcMultiClient {
         {
             Ok(response_bytes) => Self::decode_response(response_bytes),
             Err(RPCError::Network(_)) => {
-                // 网络错误：重连一次并重试
-                let fresh_client = RpcClient::connect(&self.addr)
+                // 网络错误：重连一次并重试（带上原本的 TLS 配置）
+                let fresh_client = RpcClient::connect(&self.addr, self.tls_connector.clone())
                     .await
                     .map_err(|e| RPCError::Network(NetworkError::from_string(&e.to_string())))?;
                 {
@@ -210,9 +231,36 @@ pub struct RpcClient {
 }
 
 impl RpcClient {
-    pub async fn connect(addr: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn connect(
+        addr: &str,
+        tls_connector: Option<TlsConnector>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let mut stream = TcpStream::connect(addr).await?;
         stream.set_nodelay(true)?; // RPC 必须关闭 Nagle 算法以降低延迟
+
+        // 根据传入的 tls_connector 来决定走 TLS 还是普通明文 TCP
+        if let Some(connector) = tls_connector {
+            // 从 "host:port" 字符串中直接解析出 host (domain)
+            let domain_str = addr.split(':').next().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid address format")
+            })?;
+
+            let server_name = ServerName::try_from(domain_str.to_string())
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+            let tls_stream = connector.connect(server_name, stream).await?;
+            Self::initialize_framed(tls_stream).await
+        } else {
+            Self::initialize_framed(stream).await
+        }
+    }
+
+    /// 提取出统一的握手、编解码及后台读写 Task 绑定逻辑
+    async fn initialize_framed<S>(mut stream: S) -> Result<Self, Box<dyn Error + Send + Sync>>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        // 原有协议握手：发送一个全 0 字节
         stream.write_all(&[0u8]).await?;
 
         let framed = Framed::new(stream, LengthDelimitedCodec::new());

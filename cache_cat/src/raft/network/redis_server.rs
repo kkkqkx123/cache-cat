@@ -3,6 +3,7 @@ use crate::node::parsed_config::ParsedConfig;
 use crate::protocol::command::{Client, CommandFactory};
 use crate::protocol::resp::Parser;
 use crate::raft::application::pub_sub::PubSub;
+use crate::raft::network::connection::Connection;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::raft_types::CacheCatApp;
 use bytes::{Buf, BytesMut};
@@ -12,7 +13,6 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::codec::{Decoder, Encoder};
 use tracing::{error, info};
-use crate::raft::network::connection::Connection;
 
 #[derive(Clone)]
 pub struct RedisServer {
@@ -21,7 +21,6 @@ pub struct RedisServer {
     pub tls_addr: Option<String>,
     pub cmd_factory: Arc<CommandFactory>,
     pub broadcast: Arc<PubSub>,
-    pub tls_acceptor: Option<TlsAcceptor>,
 }
 
 pub struct RespCodec {
@@ -71,7 +70,6 @@ impl RedisServer {
         app: Arc<CacheCatApp>,
         redis_addr: String,
         config: &ParsedConfig,
-        tls_acceptor: Option<TlsAcceptor>,
     ) -> Result<Self, CacheCatError> {
         let cmd_factory = Arc::new(CommandFactory::init());
         let broadcast = app.pubsub.clone();
@@ -85,7 +83,6 @@ impl RedisServer {
             tls_addr,
             cmd_factory,
             broadcast,
-            tls_acceptor,
         })
     }
 
@@ -110,9 +107,9 @@ impl RedisServer {
     pub async fn start_redis_server(self: Arc<Self>) -> std::io::Result<()> {
         let listener = TcpListener::bind(&self.redis_addr).await?;
         info!("Redis server listening on {}", self.redis_addr);
-
+        let tls_acceptor = self.app.tls_context.acceptor_for_client();
         let tls_listener =
-            if let (Some(tls_addr), Some(tls_acceptor)) = (&self.tls_addr, &self.tls_acceptor) {
+            if let (Some(tls_addr), Some(tls_acceptor)) = (&self.tls_addr, tls_acceptor) {
                 let listener = TcpListener::bind(tls_addr).await?;
                 info!("Redis TLS server listening on {}", tls_addr);
                 Some((listener, tls_acceptor.clone()))

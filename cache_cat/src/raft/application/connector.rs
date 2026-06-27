@@ -8,14 +8,17 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
+use tokio_rustls::TlsConnector;
 
 pub struct Connector {
     connection: RwLock<HashMap<String, RpcMultiClient>>,
+    tls_connector: Option<TlsConnector>,
 }
 
 impl Connector {
-    pub fn new() -> Self {
+    pub fn new(tls_connector: Option<TlsConnector>) -> Self {
         Connector {
+            tls_connector,
             connection: RwLock::new(HashMap::new()),
         }
     }
@@ -40,12 +43,11 @@ impl Connector {
         let client = match client {
             Some(c) => c,
             None => {
-                let connect_future = RpcMultiClient::connect_with_num(&addr, 1);
+                let connect_future =
+                    RpcMultiClient::connect_with_num(&addr, 1, self.tls_connector.clone());
 
                 let new_client = match timeout(duration, connect_future).await {
-                    Ok(result) => {
-                        result.map_err(|e| RpcError::Network(e.to_string()))?
-                    }
+                    Ok(result) => result.map_err(|e| RpcError::Network(e.to_string()))?,
                     Err(_) => {
                         return Err(RPCError::Timeout(err).into());
                     }

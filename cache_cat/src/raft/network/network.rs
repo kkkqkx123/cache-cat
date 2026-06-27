@@ -13,14 +13,18 @@ use openraft::{OptionalSend, RaftNetworkFactory, RaftNetworkV2, Snapshot};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 use tracing::info;
 
-pub struct NetworkFactory {}
+pub struct NetworkFactory {
+    pub tls_connector: Option<TlsConnector>,
+}
 impl RaftNetworkFactory<TypeConfig> for NetworkFactory {
     type Network = TcpNetwork;
     async fn new_client(&mut self, target: NodeId, node: &Node) -> Self::Network {
         let addr = node.endpoint.raft_addr();
         TcpNetwork {
+            tls_connector: self.tls_connector.clone(),
             addr: addr.clone(),
             nodes: Arc::new(RwLock::new(None)),
             target,
@@ -31,6 +35,7 @@ impl RaftNetworkFactory<TypeConfig> for NetworkFactory {
 
 #[derive(Clone, Default)]
 pub struct TcpNetwork {
+    tls_connector: Option<TlsConnector>,
     addr: String,
     nodes: Arc<RwLock<Option<RpcMultiClient>>>,
     target: NodeId,
@@ -48,7 +53,7 @@ impl TcpNetwork {
             }
         }
 
-        match RpcMultiClient::connect(&self.addr).await {
+        match RpcMultiClient::connect(&self.addr, self.tls_connector.clone()).await {
             Ok(client) => {
                 let mut guard = self.nodes.write();
                 // 双重检查，避免重复连接

@@ -1,7 +1,7 @@
 import redis
 import ssl
 r = redis.Redis(
-    host="localhost",
+    host="127.0.0.1",
     port=6479,
     ssl=True,
 

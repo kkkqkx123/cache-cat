@@ -4,6 +4,7 @@ use crate::node::parsed_config::ParsedConfig;
 use crate::raft::application::cluster::Cluster;
 use crate::raft::application::connector::Connector;
 use crate::raft::application::pub_sub::PubSub;
+use crate::raft::network::tls::TlsContext;
 use crate::raft::store::statemachine::StateMachineStore;
 use crate::raft::types::core::mocha::request_handler::read_request;
 use crate::raft::types::core::response_value::Value;
@@ -13,6 +14,7 @@ use crate::raft::types::file_operator::FileOperator;
 use futures::future::join_all;
 use openraft::RPCTypes::Vote;
 use openraft::error::Timeout;
+use rustls::ServerConfig;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -59,6 +61,7 @@ pub struct CacheCatApp {
     pub connector: Connector,
     pub pubsub: Arc<PubSub>,
     pub shutdown_tx: broadcast::Sender<()>,
+    pub tls_context: TlsContext,
 }
 
 impl CacheCatApp {
