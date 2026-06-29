@@ -1,5 +1,5 @@
 use crate::error::ProtocolError;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use mlua::{Lua, Value as LuaValue};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -41,61 +41,61 @@ impl Value {
         buf
     }
 
-    pub(crate) fn encode_to(&self, proto: u8, buf: &mut Vec<u8>) {
+    pub(crate) fn encode_to(&self, proto: u8, buf: &mut impl BufMut) {
         match self {
             Value::SimpleString(s) => {
-                buf.push(b'+');
-                buf.extend_from_slice(s.as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.put_u8(b'+');
+                buf.put_slice(s.as_bytes());
+                buf.put_slice(b"\r\n");
             }
             Value::Error(e) => {
-                buf.push(b'-');
-                buf.extend_from_slice(e.as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.put_u8(b'-');
+                buf.put_slice(e.as_bytes());
+                buf.put_slice(b"\r\n");
             }
             Value::Integer(i) => {
-                buf.push(b':');
-                buf.extend_from_slice(i.to_string().as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.put_u8(b':');
+                buf.put_slice(i.to_string().as_bytes());
+                buf.put_slice(b"\r\n");
             }
             Value::BulkString(None) => {
                 if proto == 3 {
-                    buf.extend_from_slice(b"_\r\n");
+                    buf.put_slice(b"_\r\n");
                 } else {
-                    buf.extend_from_slice(b"$-1\r\n");
+                    buf.put_slice(b"$-1\r\n");
                 }
             }
             Value::BulkString(Some(data)) => {
-                buf.push(b'$');
-                buf.extend_from_slice(data.len().to_string().as_bytes());
-                buf.extend_from_slice(b"\r\n");
-                buf.extend_from_slice(data);
-                buf.extend_from_slice(b"\r\n");
+                buf.put_u8(b'$');
+                buf.put_slice(data.len().to_string().as_bytes());
+                buf.put_slice(b"\r\n");
+                buf.put_slice(data);
+                buf.put_slice(b"\r\n");
             }
             Value::Array(None) => {
                 if proto == 3 {
-                    buf.extend_from_slice(b"_\r\n");
+                    buf.put_slice(b"_\r\n");
                 } else {
-                    buf.extend_from_slice(b"*-1\r\n");
+                    buf.put_slice(b"*-1\r\n");
                 }
             }
             Value::Array(Some(items)) => {
-                buf.push(b'*');
-                buf.extend_from_slice(items.len().to_string().as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.put_u8(b'*');
+                buf.put_slice(items.len().to_string().as_bytes());
+                buf.put_slice(b"\r\n");
                 for item in items {
                     item.encode_to(proto, buf);
                 }
             }
             Value::Map(pairs) => {
                 if proto == 3 {
-                    buf.push(b'%');
-                    buf.extend_from_slice(pairs.len().to_string().as_bytes());
-                    buf.extend_from_slice(b"\r\n");
+                    buf.put_u8(b'%');
+                    buf.put_slice(pairs.len().to_string().as_bytes());
+                    buf.put_slice(b"\r\n");
                 } else {
-                    buf.push(b'*');
-                    buf.extend_from_slice((pairs.len() * 2).to_string().as_bytes());
-                    buf.extend_from_slice(b"\r\n");
+                    buf.put_u8(b'*');
+                    buf.put_slice((pairs.len() * 2).to_string().as_bytes());
+                    buf.put_slice(b"\r\n");
                 }
                 for (k, v) in pairs {
                     k.encode_to(proto, buf);
@@ -104,18 +104,18 @@ impl Value {
             }
             Value::Pairs(pairs) => {
                 if proto == 3 {
-                    buf.push(b'*');
-                    buf.extend_from_slice(pairs.len().to_string().as_bytes());
-                    buf.extend_from_slice(b"\r\n");
+                    buf.put_u8(b'*');
+                    buf.put_slice(pairs.len().to_string().as_bytes());
+                    buf.put_slice(b"\r\n");
                     for (k, v) in pairs {
-                        buf.extend_from_slice(b"*2\r\n");
+                        buf.put_slice(b"*2\r\n");
                         k.encode_to(proto, buf);
                         v.encode_to(proto, buf);
                     }
                 } else {
-                    buf.push(b'*');
-                    buf.extend_from_slice((pairs.len() * 2).to_string().as_bytes());
-                    buf.extend_from_slice(b"\r\n");
+                    buf.put_u8(b'*');
+                    buf.put_slice((pairs.len() * 2).to_string().as_bytes());
+                    buf.put_slice(b"\r\n");
                     for (k, v) in pairs {
                         k.encode_to(proto, buf);
                         v.encode_to(proto, buf);
@@ -124,9 +124,9 @@ impl Value {
             }
             Value::Boolean(val) => {
                 if proto == 3 {
-                    buf.extend_from_slice(if *val { b"#t\r\n" } else { b"#f\r\n" });
+                    buf.put_slice(if *val { b"#t\r\n" } else { b"#f\r\n" });
                 } else {
-                    buf.extend_from_slice(if *val { b":1\r\n" } else { b":0\r\n" });
+                    buf.put_slice(if *val { b":1\r\n" } else { b":0\r\n" });
                 }
             }
         }

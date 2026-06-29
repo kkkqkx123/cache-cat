@@ -11,13 +11,10 @@ use tokio_rustls::{
     TlsStream, client::TlsStream as TlsClientStream, server::TlsStream as TlsServerStream,
 };
 
-pub trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin + Send {}
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncReadWrite for T {}
-
-#[allow(clippy::large_enum_variant)]
 pub enum Connection {
     Tcp(TcpStream),
-    Tls(TlsStream<TcpStream>),
+    TlsServer(Box<TlsServerStream<TcpStream>>),
+    TlsClient(Box<TlsClientStream<TcpStream>>),
 }
 
 impl Connection {
@@ -25,7 +22,8 @@ impl Connection {
     pub fn as_stream(&self) -> &TcpStream {
         match self {
             Self::Tcp(x) => x,
-            Self::Tls(x) => x.get_ref().0,
+            Self::TlsServer(x) => x.get_ref().0,
+            Self::TlsClient(x) => x.get_ref().0,
         }
     }
 }
@@ -39,7 +37,8 @@ impl AsyncRead for Connection {
     ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(x) => Pin::new(x).poll_read(cx, buf),
-            Self::Tls(x) => Pin::new(x).poll_read(cx, buf),
+            Self::TlsServer(x) => Pin::new(x).poll_read(cx, buf),
+            Self::TlsClient(x) => Pin::new(x).poll_read(cx, buf),
         }
     }
 }
@@ -53,7 +52,8 @@ impl AsyncWrite for Connection {
     ) -> Poll<std::io::Result<usize>> {
         match self.get_mut() {
             Self::Tcp(x) => Pin::new(x).poll_write(cx, buf),
-            Self::Tls(x) => Pin::new(x).poll_write(cx, buf),
+            Self::TlsServer(x) => Pin::new(x).poll_write(cx, buf),
+            Self::TlsClient(x) => Pin::new(x).poll_write(cx, buf),
         }
     }
 
@@ -65,7 +65,8 @@ impl AsyncWrite for Connection {
     ) -> Poll<std::io::Result<usize>> {
         match self.get_mut() {
             Self::Tcp(x) => Pin::new(x).poll_write_vectored(cx, bufs),
-            Self::Tls(x) => Pin::new(x).poll_write_vectored(cx, bufs),
+            Self::TlsServer(x) => Pin::new(x).poll_write_vectored(cx, bufs),
+            Self::TlsClient(x) => Pin::new(x).poll_write_vectored(cx, bufs),
         }
     }
 
@@ -73,7 +74,8 @@ impl AsyncWrite for Connection {
     fn is_write_vectored(&self) -> bool {
         match self {
             Self::Tcp(x) => x.is_write_vectored(),
-            Self::Tls(x) => x.is_write_vectored(),
+            Self::TlsServer(x) => x.is_write_vectored(),
+            Self::TlsClient(x) => x.is_write_vectored(),
         }
     }
 
@@ -81,7 +83,8 @@ impl AsyncWrite for Connection {
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(x) => Pin::new(x).poll_flush(cx),
-            Self::Tls(x) => Pin::new(x).poll_flush(cx),
+            Self::TlsServer(x) => Pin::new(x).poll_flush(cx),
+            Self::TlsClient(x) => Pin::new(x).poll_flush(cx),
         }
     }
 
@@ -89,7 +92,8 @@ impl AsyncWrite for Connection {
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(x) => Pin::new(x).poll_shutdown(cx),
-            Self::Tls(x) => Pin::new(x).poll_shutdown(cx),
+            Self::TlsServer(x) => Pin::new(x).poll_shutdown(cx),
+            Self::TlsClient(x) => Pin::new(x).poll_shutdown(cx),
         }
     }
 }
@@ -100,7 +104,8 @@ impl AsRawSocket for Connection {
     fn as_raw_socket(&self) -> RawSocket {
         match self {
             Self::Tcp(x) => x.as_raw_socket(),
-            Self::Tls(x) => x.as_raw_socket(),
+            Self::TlsServer(x) => x.as_raw_socket(),
+            Self::TlsClient(x) => x.as_raw_socket(),
         }
     }
 }
@@ -111,7 +116,8 @@ impl AsRawFd for Connection {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::Tcp(x) => x.as_raw_fd(),
-            Self::Tls(x) => x.as_raw_fd(),
+            Self::TlsServer(x) => x.as_raw_fd(),
+            Self::TlsClient(x) => x.as_raw_fd(),
         }
     }
 }
@@ -126,20 +132,23 @@ impl From<TcpStream> for Connection {
 impl From<TlsStream<TcpStream>> for Connection {
     #[inline]
     fn from(value: TlsStream<TcpStream>) -> Self {
-        Self::Tls(value)
+        match value {
+            TlsStream::Server(x) => Self::TlsServer(Box::new(x)),
+            TlsStream::Client(x) => Self::TlsClient(Box::new(x)),
+        }
     }
 }
 
 impl From<TlsServerStream<TcpStream>> for Connection {
     #[inline]
     fn from(value: TlsServerStream<TcpStream>) -> Self {
-        Self::Tls(TlsStream::Server(value))
+        Self::TlsServer(Box::new(value))
     }
 }
 
 impl From<TlsClientStream<TcpStream>> for Connection {
     #[inline]
     fn from(value: TlsClientStream<TcpStream>) -> Self {
-        Self::Tls(TlsStream::Client(value))
+        Self::TlsClient(Box::new(value))
     }
 }

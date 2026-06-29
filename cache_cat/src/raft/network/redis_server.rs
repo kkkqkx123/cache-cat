@@ -6,7 +6,7 @@ use crate::raft::application::pub_sub::PubSub;
 use crate::raft::network::connection::Connection;
 use crate::raft::types::core::response_value::Value;
 use crate::raft::types::raft_types::CacheCatApp;
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -42,24 +42,18 @@ impl Decoder for RespCodec {
     type Item = Value;
     type Error = std::io::Error;
 
+    #[inline]
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        match Parser::parse(src) {
-            Some((value, consumed)) => {
-                src.advance(consumed);
-                Ok(Some(value))
-            }
-            None => Ok(None),
-        }
+        Ok(Parser::take_from_bytes_stream(src))
     }
 }
 
 impl Encoder<Value> for RespCodec {
     type Error = std::io::Error;
 
+    #[inline]
     fn encode(&mut self, item: Value, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut buf = Vec::new();
-        item.encode_to(self.proto_version, &mut buf);
-        dst.extend_from_slice(&buf);
+        item.encode_to(self.proto_version, dst);
         Ok(())
     }
 }
