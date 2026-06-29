@@ -90,11 +90,13 @@ impl Parser {
                 bytes: Some((pos, len)),
                 ..
             } => {
-                // split `length` line
                 buffer.advance(pos);
 
-                // split off `eof`
-                Value::BulkString(Some(buffer.split_off(len)))
+                let data = buffer.split_to(len);
+
+                buffer.advance(2);
+
+                Value::BulkString(Some(data))
             }
 
             Parser::Array { value: None, .. } => Value::Array(None),
@@ -160,7 +162,7 @@ impl Parser {
     /// also the length of `line`
     #[inline]
     fn find_line(buffer: &[u8]) -> Option<usize> {
-        for (index, window) in buffer.array_windows::<2>().enumerate() {
+        for (index, window) in buffer.windows(2).enumerate() {
             if window == b"\r\n" {
                 return Some(index);
             }
