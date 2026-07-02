@@ -122,3 +122,4 @@ r.rpush("list test2", "test")
 print(r.rpush("list test2", "test2"))
 print(r.lrange("list test2", 0, -1))
 
+print(r.type("test20"))

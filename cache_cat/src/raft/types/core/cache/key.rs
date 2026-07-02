@@ -1,6 +1,5 @@
 use crate::mocha::{EntrySnapshot, ExpirePolicy, MochaOperation};
 use crate::protocol::key::del::{DelParams, DelReq};
-use crate::protocol::key::exists::ExistsParams;
 use crate::protocol::key::rename::RenameParams;
 use crate::protocol::key::renamenx::RenameNxParams;
 use crate::raft::types::core::mocha::cas::ComputeCommand;
@@ -142,14 +141,7 @@ impl MyCache {
         Value::Integer(count)
     }
 
-    pub fn exists(
-        &self,
-        exists_params: ExistsParams,
-        db_number: u16,
-        read_clock: Option<u64>,
-    ) -> Value {
-        self.execute_multi_read(exists_params, db_number, read_clock)
-    }
+
 
     pub fn persist(&self, persist: PersistReq, update: &mut Update) -> Value {
         self.execute_compute(persist, update)

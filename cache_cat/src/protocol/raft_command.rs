@@ -45,6 +45,7 @@ use crate::raft::types::entry::request::Operation;
 use std::collections::HashMap;
 use std::fmt;
 use tracing::warn;
+use crate::protocol::key::type_::TypeCommand;
 
 pub trait RaftCommand: Send + Sync {
     fn raft_request(&self, items: &[Value]) -> Result<Operation, ProtocolError>;
@@ -131,7 +132,7 @@ impl RaftCommandFactory {
         factory.register("HVALS", HValsCommand);
         factory.register("LLEN", LLenCommand);
         factory.register("RPUSH", RPushCommand);
-
+        factory.register("TYPE", TypeCommand);
         factory
     }
 

@@ -5,6 +5,7 @@ use crate::protocol::hash::hkeys::HKeysParams;
 use crate::protocol::hash::hmget::HMGetParams;
 use crate::protocol::hash::hvals::HValsParams;
 use crate::protocol::key::exists::ExistsParams;
+use crate::protocol::key::type_::TypeParams;
 use crate::protocol::list::llen::LLenParams;
 use crate::protocol::list::lrange::LRangeParams;
 use crate::protocol::set::smembers::SMembersParams;
@@ -32,4 +33,5 @@ pub enum ReadOperation {
     HKeys(HKeysParams),
     HVals(HValsParams),
     LLen(LLenParams),
+    Type(TypeParams),
 }

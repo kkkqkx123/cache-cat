@@ -1,9 +1,6 @@
 use crate::protocol::NO_EXPIRATION;
 use crate::protocol::string::append::AppendReq;
-use crate::protocol::string::get::GetParams;
 use crate::protocol::string::incr::IncrReq;
-use crate::protocol::string::len::StrLenParams;
-use crate::protocol::string::mget::MgetParams;
 use crate::protocol::string::mset::MsetParams;
 use crate::protocol::string::set::{Expiration, SetMode, SetParams, SetReq};
 use crate::raft::types::core::mocha::mocha::{MyCache, Update};
@@ -137,18 +134,6 @@ impl MyCache {
         } else {
             Value::ok()
         }
-    }
-
-    pub fn m_get(&self, param: MgetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_multi_read(param, db_number, read_clock)
-    }
-
-    pub fn get(&self, param: GetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
-
-    pub fn str_len(&self, param: StrLenParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
     }
 
     pub fn set(&self, param: SetReq, update: &mut Update) -> Value {

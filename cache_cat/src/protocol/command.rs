@@ -78,9 +78,10 @@ use std::fmt::{Display, Formatter};
 use tokio::select;
 use tokio::sync::watch;
 
+use crate::protocol::key::type_::TypeCommand;
+use crate::raft::network::connection::Connection;
 use tokio_util::codec::Framed;
 use tracing::{error, warn};
-use crate::raft::network::connection::Connection;
 
 #[async_trait]
 pub trait Command: Send + Sync {
@@ -121,7 +122,6 @@ pub trait SubCommand: Send + Sync {
         server: &RedisServer,
     ) -> Result<Value, CacheCatError>;
 }
-
 
 pub struct Client {
     pub id: u64,
@@ -256,6 +256,7 @@ impl CommandFactory {
         factory.register("SETEX", SetExCommand);
         factory.register("SETNX", SetNxCommand);
         factory.register("STRLEN", StrLenCommand);
+        factory.register("TYPE", TypeCommand);
         // List commands
         factory.register("LPUSH", LPushCommand);
         factory.register("RPUSH", RPushCommand);

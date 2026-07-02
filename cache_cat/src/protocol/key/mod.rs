@@ -6,3 +6,4 @@ pub mod persist;
 pub mod pexpire;
 pub mod rename;
 pub mod renamenx;
+pub mod type_;

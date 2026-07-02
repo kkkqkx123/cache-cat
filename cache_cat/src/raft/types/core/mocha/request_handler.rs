@@ -11,23 +11,22 @@ pub fn read_request(
     read_clock: Option<u64>,
 ) -> Value {
     match read_operation {
-        ReadOperation::Exists(param) => my_cache.exists(param, db_number, read_clock),
-        ReadOperation::Get(param) => my_cache.get(param, db_number, read_clock),
-        ReadOperation::LRange(param) => my_cache.l_range(param, db_number, read_clock),
-        ReadOperation::MGet(param) => my_cache.m_get(param, db_number, read_clock),
-        ReadOperation::ZRange(param) => my_cache.z_range(param, db_number, read_clock),
-        ReadOperation::HGet(param) => my_cache.h_get(param, db_number, read_clock),
-        ReadOperation::SMembers(param) => my_cache.s_member(param, db_number, read_clock),
-        ReadOperation::HMGet(param) => my_cache.h_m_get(param, db_number, read_clock),
-        ReadOperation::GetBit(param) => my_cache.get_bit(param, db_number, read_clock),
-        ReadOperation::ZRangeByScore(param) => {
-            my_cache.z_range_by_score(param, db_number, read_clock)
-        }
-        ReadOperation::StrLen(param) => my_cache.str_len(param, db_number, read_clock),
-        ReadOperation::HGetAll(param) => my_cache.h_get_all(param, db_number, read_clock),
-        ReadOperation::HKeys(param) => my_cache.h_keys(param, db_number, read_clock),
-        ReadOperation::HVals(param) => my_cache.h_vals(param, db_number, read_clock),
-        ReadOperation::LLen(param) => my_cache.l_len(param, db_number, read_clock),
+        ReadOperation::Exists(param) => my_cache.execute_multi_read(param, db_number, read_clock),
+        ReadOperation::Get(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::LRange(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::MGet(param) => my_cache.execute_multi_read(param, db_number, read_clock),
+        ReadOperation::ZRange(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::HGet(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::SMembers(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::HMGet(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::GetBit(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::ZRangeByScore(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::StrLen(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::HGetAll(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::HKeys(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::HVals(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::LLen(param) => my_cache.execute_read(param, db_number, read_clock),
+        ReadOperation::Type(param) => my_cache.execute_read(param, db_number, read_clock),
     }
 }
 

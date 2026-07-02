@@ -72,15 +72,6 @@ impl ExpireParams {
     }
 }
 
-/// Parse a Value as u64
-fn parse_u64(value: &Value) -> Option<u64> {
-    match value {
-        Value::BulkString(Some(data)) => String::from_utf8_lossy(data).parse::<u64>().ok(),
-        Value::SimpleString(s) => s.parse::<u64>().ok(),
-        Value::Integer(i) if *i >= 0 => Some(*i as u64),
-        _ => None,
-    }
-}
 
 /// EXPIRE command executor
 pub struct ExpireCommand;

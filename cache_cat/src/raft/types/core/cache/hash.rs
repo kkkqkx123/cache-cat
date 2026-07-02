@@ -3,8 +3,6 @@ use crate::protocol::hash::hdel::HDelReq;
 use crate::protocol::hash::hget::HGetParams;
 use crate::protocol::hash::hgetall::HGetAllParams;
 use crate::protocol::hash::hincrby::HIncrReq;
-use crate::protocol::hash::hkeys::HKeysParams;
-use crate::protocol::hash::hmget::HMGetParams;
 use crate::protocol::hash::hset::HSetReq;
 use crate::protocol::hash::hvals::HValsParams;
 use crate::raft::types::core::mocha::mocha::{MyCache, MyValue, Update};
@@ -90,30 +88,13 @@ impl ReadCommand for HGetParams {
     }
 }
 impl MyCache {
-    pub fn h_m_get(&self, param: HMGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
 
-    pub fn h_keys(&self, param: HKeysParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
 
-    pub fn h_vals(&self, param: HValsParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
 
-    pub fn h_get_all(
-        &self,
-        param: HGetAllParams,
-        db_number: u16,
-        read_clock: Option<u64>,
-    ) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
 
-    pub fn h_get(&self, param: HGetParams, db_number: u16, read_clock: Option<u64>) -> Value {
-        self.execute_read(param, db_number, read_clock)
-    }
+
+
+
     pub fn h_del(&self, param: HDelReq, update: &mut Update) -> Value {
         self.execute_compute(param, update)
     }
