@@ -116,6 +116,10 @@ impl ComputeCommand for SRemReq {
         entry: EntrySnapshot<MyValue>,
         _write_clock: u64,
     ) -> (MochaOperation<MyValue>, Value) {
+        // Check if entry exists by checking if value is the default/empty state
+        // This depends on how your EntrySnapshot works
+        // Assuming entry.value exists but may be empty/placeholder
+
         match &entry.value.data {
             ValueObject::Set(set) => {
                 let mut set = set.lock();
@@ -128,12 +132,25 @@ impl ComputeCommand for SRemReq {
                 let is_empty = set.is_empty();
                 drop(set);
 
+                // Redis SREM returns the number of members that were removed
                 if deleted_count == 0 {
-                    return (MochaOperation::Abort, Value::Integer(0));
+                    // No members were removed, keep the set unchanged
+                    return (
+                        MochaOperation::Insert {
+                            value: entry.value.clone(),
+                            expire: entry.get_expire_policy(),
+                        },
+                        Value::Integer(0),
+                    );
                 }
+
+                // Some members were removed
                 if is_empty {
+                    // Set is now empty, remove it entirely (Redis auto-removes empty sets)
                     return (MochaOperation::Remove, Value::Integer(deleted_count));
                 }
+
+                // Set still has members, update it
                 (
                     MochaOperation::Insert {
                         value: entry.value.clone(),
@@ -142,6 +159,7 @@ impl ComputeCommand for SRemReq {
                     Value::Integer(deleted_count),
                 )
             }
+            // Key exists but is not a Set - return error (Redis behavior)
             _ => (
                 MochaOperation::Abort,
                 Value::Error(
@@ -152,6 +170,7 @@ impl ComputeCommand for SRemReq {
     }
 
     fn init(self) -> (MochaOperation<MyValue>, Value) {
+        // For non-existent key, Redis SREM returns 0
         (MochaOperation::Abort, Value::Integer(0))
     }
 }
